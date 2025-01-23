@@ -34,8 +34,12 @@ export async function initializePool(): Promise<void> {
     try {
       fs.accessSync(socketPath.split('/.s.PGSQL.5432')[0], fs.constants.F_OK);
       console.log('Cloud SQL socket directory exists');
+      
+      // Add a small delay to ensure socket is ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (err) {
       console.error('Cloud SQL socket directory not found:', err);
+      throw new Error('Cloud SQL socket not available');
     }
 
     // Debug: Log connection config
@@ -61,7 +65,9 @@ export async function initializePool(): Promise<void> {
     });
 
     // Test the connection
-    await pool.connect();
+    const client = await pool.connect();
+    await client.query('SELECT 1'); // Verify we can execute queries
+    client.release();
     console.log('Database connected successfully');
 
     // Debug: Check database schema

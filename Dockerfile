@@ -20,7 +20,5 @@ RUN npm run build
 # Remove dev dependencies
 RUN npm prune --production
 
-# Expose port
-EXPOSE 3000
-
-# Start the server
+# Expose the port specified by the PORT environment variable
+EXPOSE ${PORT}

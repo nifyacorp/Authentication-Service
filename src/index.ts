@@ -4,7 +4,7 @@ import { authRouter } from './routes/auth.js';
 import { initializePool } from './config/database.js';
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080; // Default to 8080 for Cloud Run
 
 // Middleware
 app.use(cors());
@@ -20,8 +20,8 @@ app.get('/health', (req, res) => {
 
 // Initialize database pool and start server
 initializePool().then(() => {
-  app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  app.listen(port, '0.0.0.0', () => { // Listen on all network interfaces
+    console.log(`Server running on port ${port}`);
   });
 }).catch(error => {
   console.error('Failed to initialize database:', error);
