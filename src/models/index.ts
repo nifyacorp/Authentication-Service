@@ -5,7 +5,7 @@ import type { QueryResult, QueryResultRow } from 'pg';
 async function executeQuery<T extends QueryResultRow>(query: string, params: any[] = []): Promise<QueryResult<T>> {
   console.log('Executing query:', {
     text: query,
-    params: params.map(p => p === null ? 'null' : p.toString())
+    params: params.map(p => p === null ? 'null' : String(p))
   });
   try {
     const result = await getPool().query(query, params);
@@ -56,7 +56,7 @@ export const queries = {
   // User queries
   createUser: async (
     email: string,
-    passwordHash: string | null,
+    passwordHash: string,
     name: string,
     googleId?: string,
     pictureUrl?: string

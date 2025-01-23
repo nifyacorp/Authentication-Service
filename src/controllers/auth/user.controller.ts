@@ -82,7 +82,7 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
 
     // Reset login attempts on successful login
     if (user.login_attempts > 0) {
-      await queries.updateLoginAttempts(user.id, 0, undefined);
+      await queries.updateLoginAttempts(user.id, 0, null);
     }
 
     const accessToken = generateAccessToken(user.id);
