@@ -1,6 +1,5 @@
 import { getPool } from '../config/database.js';
-import pkg from 'pg';
-const { QueryResult } = pkg;
+import type { QueryResult } from 'pg';
 
 export interface User {
   id: string;
