@@ -32,7 +32,7 @@ export const logout = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const refreshToken = async (req: AuthRequest<{}, {}, RefreshTokenBody>, res: Response) => {
+export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>, res: Response) => {
   try {
     const { refreshToken } = req.body;
     

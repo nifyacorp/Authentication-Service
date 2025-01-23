@@ -1,6 +1,6 @@
 import { Request } from 'express';
 
-export interface AuthRequest extends Request {
+export interface AuthRequest<P = {}, ResBody = any, ReqBody = any> extends Request<P, ResBody, ReqBody> {
   headers: {
     authorization?: string;
   };
