@@ -1,0 +1,31 @@
+# Dependencies
+node_modules
+npm-debug.log
+
+# Source control
+.git
+.gitignore
+
+# Environment
+.env
+.env.*
+
+# Development
+src
+tests
+*.test.ts
+*.spec.ts
+
+# Build artifacts
+dist
+
+# IDE
+.vscode
+.idea
+
+# Misc
+README.md
+LICENSE
+*.md
+.dockerignore
+Dockerfile
