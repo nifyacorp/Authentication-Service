@@ -4,7 +4,7 @@ import { authRouter } from './routes/auth.js';
 import { initializePool } from './config/database.js';
 
 const app = express();
-const port = process.env.PORT || 8080; // Default to 8080 for Cloud Run
+const port = parseInt(process.env.PORT || '8080', 10); // Convert to number
 
 // Middleware
 app.use(cors());
@@ -20,7 +20,7 @@ app.get('/health', (req, res) => {
 
 // Initialize database pool and start server
 initializePool().then(() => {
-  app.listen(port, '0.0.0.0', () => { // Listen on all network interfaces
+  app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on port ${port}`);
   });
 }).catch(error => {

@@ -21,4 +21,7 @@ RUN npm run build
 RUN npm prune --production
 
 # Expose the port specified by the PORT environment variable
-EXPOSE ${PORT}
+EXPOSE 8080
+
+# Start the application
+CMD ["npm", "start"]
