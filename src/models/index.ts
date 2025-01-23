@@ -1,8 +1,8 @@
 import { getPool } from '../config/database.js';
-import type { QueryResult } from 'pg';
+import type { QueryResult, QueryResultRow } from 'pg';
 
 // Debug function to log query execution
-async function executeQuery<T>(query: string, params: any[] = []): Promise<QueryResult<T>> {
+async function executeQuery<T extends QueryResultRow>(query: string, params: any[] = []): Promise<QueryResult<T>> {
   console.log('Executing query:', {
     text: query,
     params: params.map(p => p === null ? 'null' : p.toString())
