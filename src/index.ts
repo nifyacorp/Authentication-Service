@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
 import { authRouter } from './routes/auth.js';
+import { initializePool } from './config/database.js';
 
 // Load environment variables
 config();
@@ -21,6 +22,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.listen(port, () => {
+// Initialize database pool and start server
+initializePool().then(() => {
+  app.listen(port, () => {
   console.log(`Server running on port ${port}`);
+  });
+}).catch(error => {
+  console.error('Failed to initialize database:', error);
+  process.exit(1);
 });
