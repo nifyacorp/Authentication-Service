@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../../config/jwt.js';
+import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 import { queries } from '../../models/index.js';
 import { AuthRequest, RefreshTokenBody } from './types.js';
 
