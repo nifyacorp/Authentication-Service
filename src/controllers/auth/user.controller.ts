@@ -1,20 +1,23 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET, MAX_LOGIN_ATTEMPTS, LOCK_TIME, RESET_TOKEN_EXPIRES_IN } from '../../config/jwt.js';
+import { JWT_SECRET, MAX_LOGIN_ATTEMPTS, LOCK_TIME } from '../../config/jwt.js';
 import { signupSchema, loginSchema } from '../../utils/validation.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 import { z } from 'zod';
 import { AuthRequest, LoginBody, SignupBody, VerifyEmailBody, UserProfile } from './types.js';
+import { queries } from '../../models/index.js';
 
 export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
   try {
+    console.log('Processing login request');
     const { email, password } = req.body;
 
     try {
       loginSchema.parse({ email, password });
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.log('Login validation failed:', error.errors);
         return res.status(400).json({
           message: 'Validation failed',
           errors: error.errors.map(err => ({
@@ -25,33 +28,47 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
       }
     }
 
-    // TODO: Replace with actual database queries
-    const user = {
-      id: 'user-id',
-      email: 'user@example.com',
-      name: 'John Doe',
-      password: await bcrypt.hash('Password123!', 10),
-      loginAttempts: 0,
-      lockUntil: null as number | null
-    };
+    // Get user from database
+    const user = await queries.getUserByEmail(email);
+    
+    if (!user) {
+      console.log('Login attempt with non-existent email:', email);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
 
-    if (user.lockUntil && user.lockUntil > Date.now()) {
+    // Check if account is locked
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      console.log(`Account locked for user ${user.id} until ${user.locked_until}`);
       return res.status(401).json({
         message: 'Account is locked. Please try again later.',
-        lockExpires: new Date(user.lockUntil).toISOString()
+        lockExpires: user.locked_until.toISOString()
       });
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    // Verify password
+    if (!user.password_hash) {
+      console.log(`User ${user.id} has no password (OAuth account)`);
+      return res.status(401).json({ message: 'Invalid login method' });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!isValidPassword) {
-      const loginAttempts = user.loginAttempts + 1;
+      const loginAttempts = (user.login_attempts || 0) + 1;
+      let lockUntil: Date | undefined;
 
       if (loginAttempts >= MAX_LOGIN_ATTEMPTS) {
-        const lockUntil = Date.now() + LOCK_TIME;
+        lockUntil = new Date(Date.now() + LOCK_TIME);
+        console.log(`Locking account for user ${user.id} until ${lockUntil}`);
+      }
+
+      // Update login attempts and lock status
+      await queries.updateLoginAttempts(user.id, loginAttempts, lockUntil);
+
+      if (lockUntil) {
         return res.status(401).json({
           message: 'Account locked due to too many failed attempts',
-          lockExpires: new Date(lockUntil).toISOString()
+          lockExpires: lockUntil.toISOString()
         });
       }
 
@@ -63,8 +80,18 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
       });
     }
 
+    // Reset login attempts on successful login
+    if (user.login_attempts > 0) {
+      await queries.updateLoginAttempts(user.id, 0, null);
+    }
+
     const accessToken = generateAccessToken(user.id);
     const refreshToken = generateRefreshToken(user.id);
+    
+    // Store refresh token
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+    await queries.createRefreshToken(user.id, refreshToken, expiresAt);
     
     console.log(`Successful login for user: ${user.id}`);
     
@@ -79,18 +106,27 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        message: 'Internal server error',
+        error: error.message 
+      });
+    } else {
+      res.status(500).json({ message: 'Internal server error' });
+    }
   }
 };
 
 export const signup = async (req: Request<{}, {}, SignupBody>, res: Response) => {
   try {
+    console.log('Processing signup request');
     const { email, password, name } = req.body;
 
     try {
       signupSchema.parse({ email, password, name });
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.log('Validation failed:', error.errors);
         return res.status(400).json({
           message: 'Validation failed',
           errors: error.errors.map(err => ({
@@ -101,77 +137,122 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response) =>
       }
     }
 
-    // TODO: Check if email exists
-    const emailExists = false;
-    if (emailExists) {
+    // Check if email exists
+    const existingUser = await queries.getUserByEmail(email);
+    if (existingUser) {
+      console.log('Email already exists:', email);
       return res.status(409).json({ message: 'Email already exists' });
     }
 
+    console.log('Creating new user with email:', email);
+
+    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const userId = 'generated-user-id';
-    const createdAt = new Date().toISOString();
+    // Create user in database
+    const user = await queries.createUser(
+      email,
+      hashedPassword,
+      name
+    );
 
-    const token = generateAccessToken(userId);
+    console.log('User created successfully:', user.id);
 
-    try {
-      // TODO: Implement welcome email
-    } catch (error) {
-      console.error('Failed to send welcome email:', error);
-    }
+    // Generate tokens
+    const accessToken = generateAccessToken(user.id);
+    const refreshToken = generateRefreshToken(user.id);
+
+    // Store refresh token
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+    await queries.createRefreshToken(user.id, refreshToken, expiresAt);
+
+    console.log('Tokens generated and stored for user:', user.id);
     
     res.status(201).json({
       user: {
-        id: userId,
+        id: user.id,
         email,
         name,
-        createdAt
+        createdAt: user.created_at
       },
-      token
+      accessToken,
+      refreshToken
     });
   } catch (error) {
     console.error('Signup error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        message: 'Internal server error',
+        error: error.message 
+      });
+    } else {
+      res.status(500).json({ message: 'Internal server error' });
+    }
   }
 };
 
 export const getCurrentUser = async (req: AuthRequest, res: Response) => {
   try {
+    console.log('Processing get current user request');
     const authHeader = req.headers.authorization;
     
     if (!authHeader?.startsWith('Bearer ')) {
+      console.log('Missing or invalid authorization header');
       return res.status(401).json({ message: 'Missing or invalid token' });
     }
     
     const token = authHeader.split(' ')[1];
     
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string, type: string };
+
+      // Verify token type
+      if (decoded.type !== 'access') {
+        console.log('Invalid token type for profile access');
+        return res.status(401).json({ message: 'Invalid token type' });
+      }
       
-      // TODO: Replace with actual database query
-      const user: UserProfile = {
-        id: decoded.userId,
-        email: 'user@example.com',
-        name: 'John Doe',
-        createdAt: new Date().toISOString(),
-        emailVerified: true,
+      // Get user from database
+      const user = await queries.getUserById(decoded.userId);
+      
+      if (!user) {
+        console.log('User not found:', decoded.userId);
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      console.log(`Profile retrieved for user: ${user.id}`);
+      
+      // Transform database user to UserProfile format
+      const userProfile: UserProfile = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        createdAt: user.created_at.toISOString(),
+        emailVerified: user.email_verified,
         preferences: {
-          theme: 'light',
+          theme: 'light', // Default preferences
           language: 'en',
           notifications: true
         }
       };
       
-      console.log(`Profile retrieved for user: ${user.id}`);
-      
-      res.json(user);
+      res.json(userProfile);
     } catch (jwtError) {
+      console.log('JWT verification failed:', jwtError);
       return res.status(401).json({ message: 'Invalid or expired token' });
     }
   } catch (error) {
     console.error('Get current user error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        message: 'Internal server error',
+        error: error.message 
+      });
+    } else {
+      res.status(500).json({ message: 'Internal server error' });
+    }
   }
 };
 

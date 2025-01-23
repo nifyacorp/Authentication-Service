@@ -1,17 +1,17 @@
 # Authentication API Documentation
 
-This API provides a complete authentication system with various endpoints for user management, authentication, and OAuth integration.
+This API provides a complete authentication system with various endpoints for user management, authentication, and OAuth integration. The API is built with Express.js, TypeScript, and PostgreSQL.
 
 ## Status Icons
 - ❌ Not Implemented
 - ✅ Working
-- ⚡ Partially Implemented (needs database integration)
+- ⚠️ Partially Implemented
 
 ## Authentication Endpoints
 
 ### User Registration and Authentication
 
-#### `POST /api/auth/signup` ⚡
+#### `POST /api/auth/signup` ✅
 - **Purpose**: Register a new user
 - **Body**: 
   ```json
@@ -22,8 +22,13 @@ This API provides a complete authentication system with various endpoints for us
   }
   ```
 - **Returns**: User data and authentication token
+- **Features**:
+  - Password validation (min 8 chars, uppercase, number, special char)
+  - Name validation (2-50 chars, letters and spaces only)
+  - Email uniqueness check
+  - Password hashing with bcrypt
 
-#### `POST /api/auth/login` ⚡
+#### `POST /api/auth/login` ✅
 - **Purpose**: Authenticate user and get tokens
 - **Body**: 
   ```json
@@ -32,21 +37,31 @@ This API provides a complete authentication system with various endpoints for us
     "password": "string"
   }
   ```
-- **Returns**: Access token and refresh token
+- **Returns**: User data, access token, and refresh token
+- **Features**:
+  - Account lockout after 5 failed attempts
+  - Password verification with bcrypt
+  - Login attempt tracking
 
-#### `POST /api/auth/logout` ⚡
+#### `POST /api/auth/logout` ✅
 - **Purpose**: Invalidate current session
 - **Headers**: `Authorization: Bearer <token>`
 - **Returns**: 200 OK
+- **Features**:
+  - Token validation
+  - Revokes all refresh tokens
 
 ### Session Management
 
-#### `GET /api/auth/me` ⚡
+#### `GET /api/auth/me` ✅
 - **Purpose**: Get current user profile
 - **Headers**: `Authorization: Bearer <token>`
 - **Returns**: User profile data
+- **Features**:
+  - Token validation
+  - Returns user preferences and profile info
 
-#### `POST /api/auth/refresh` ⚡
+#### `POST /api/auth/refresh` ✅
 - **Purpose**: Refresh access token
 - **Body**: 
   ```json
@@ -54,16 +69,24 @@ This API provides a complete authentication system with various endpoints for us
     "refreshToken": "string"
   }
   ```
-- **Returns**: New access token
+- **Returns**: New access and refresh tokens
+- **Features**:
+  - Token validation and expiration check
+  - Old token revocation
+  - Database-backed token storage
 
-#### `POST /api/auth/revoke-all-sessions` ⚡
+#### `POST /api/auth/revoke-all-sessions` ✅
 - **Purpose**: Logout from all devices
 - **Headers**: `Authorization: Bearer <token>`
 - **Returns**: 200 OK
+- **Features**:
+  - Token validation
+  - Revokes all refresh tokens for the user
+  - Returns revocation timestamp
 
 ### Password Management
 
-#### `POST /api/auth/forgot-password` ⚡
+#### `POST /api/auth/forgot-password` ⚠️
 - **Purpose**: Initiate password reset
 - **Body**: 
   ```json
@@ -71,9 +94,12 @@ This API provides a complete authentication system with various endpoints for us
     "email": "string"
   }
   ```
-- **Returns**: 200 OK with reset instructions
+- **Returns**: 200 OK
+- **Features**:
+  - Rate limiting (3 requests per hour)
+  - Email sending (to be implemented)
 
-#### `POST /api/auth/reset-password` ⚡
+#### `POST /api/auth/reset-password` ⚠️
 - **Purpose**: Reset password using token
 - **Body**: 
   ```json
@@ -84,7 +110,7 @@ This API provides a complete authentication system with various endpoints for us
   ```
 - **Returns**: 200 OK
 
-#### `POST /api/auth/change-password` ⚡
+#### `POST /api/auth/change-password` ✅
 - **Purpose**: Change password while logged in
 - **Headers**: `Authorization: Bearer <token>`
 - **Body**: 
@@ -95,10 +121,14 @@ This API provides a complete authentication system with various endpoints for us
   }
   ```
 - **Returns**: 200 OK
+- **Features**:
+  - Current password verification
+  - Password validation
+  - Session invalidation
 
 ### Email Verification
 
-#### `POST /api/auth/verify-email` ⚡
+#### `POST /api/auth/verify-email` ⚠️
 - **Purpose**: Verify email address
 - **Body**: 
   ```json
@@ -107,15 +137,20 @@ This API provides a complete authentication system with various endpoints for us
   }
   ```
 - **Returns**: 200 OK
+- **Note**: Token generation implemented, email sending pending
 
 ### OAuth Integration
 
-#### `POST /api/auth/google/login` ⚡
+#### `POST /api/auth/google/login` ✅
 - **Purpose**: Initiate Google OAuth login
 - **Returns**: Google authorization URL with CSRF protection
 - **Security**: Implements state token validation
+- **Features**:
+  - CSRF protection
+  - State token management
+  - Configurable scopes
 
-#### `GET /api/auth/google/callback` ⚡
+#### `GET /api/auth/google/callback` ⚠️
 - **Purpose**: Handle Google OAuth callback
 - **Query Parameters**:
   ```typescript
@@ -125,12 +160,7 @@ This API provides a complete authentication system with various endpoints for us
   }
   ```
 - **Returns**: Access token and user data
-- **Features**:
-  - CSRF protection via state token
-  - Handles new and returning users
-  - Verifies email status
-  - Stores Google profile info
-- **Returns**: Google authorization URL
+- **Note**: Token validation implemented, database integration pending
 
 ## Environment Variables
 
@@ -145,6 +175,7 @@ GOOGLE_REDIRECT_URI=        # OAuth callback URL
 ## Health Check
 
 #### `GET /health` ✅
+- **Purpose**: Check API health and database connection
 - **Purpose**: Check API health
 - **Returns**: Status OK
 
@@ -152,6 +183,7 @@ GOOGLE_REDIRECT_URI=        # OAuth callback URL
 
 ### Prerequisites
 - Node.js 18 or higher
+- PostgreSQL database
 - npm or yarn
 
 ### Setup

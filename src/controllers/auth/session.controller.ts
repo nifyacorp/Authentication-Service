@@ -1,73 +1,190 @@
 import { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../../config/jwt.js';
+import { queries } from '../../models/index.js';
 import { AuthRequest, RefreshTokenBody } from './types.js';
 
 export const logout = async (req: AuthRequest, res: Response) => {
   try {
+    console.log('Processing logout request');
     const authHeader = req.headers.authorization;
     
     if (!authHeader?.startsWith('Bearer ')) {
+      console.log('Missing or invalid authorization header');
       return res.status(401).json({ message: 'Missing or invalid token' });
     }
     
     const token = authHeader.split(' ')[1];
     
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string, type: string };
+
+      // Verify token type
+      if (decoded.type !== 'access') {
+        console.log('Invalid token type for logout');
+        return res.status(401).json({ message: 'Invalid token type' });
+      }
       
-      // TODO: Add these database operations:
-      // 1. Find and remove the refresh token from the database
-      // 2. Clear any session data associated with the user
+      // Get user from database to verify existence
+      const user = await queries.getUserById(decoded.userId);
+      if (!user) {
+        console.log('User not found for logout:', decoded.userId);
+        return res.status(401).json({ message: 'Invalid token' });
+      }
+
+      // Revoke all refresh tokens for the user
+      await queries.revokeAllUserRefreshTokens(decoded.userId);
       
       console.log(`User ${decoded.userId} logged out successfully`);
       
       res.status(200).json({ message: 'Logged out successfully' });
     } catch (jwtError) {
+      console.log('JWT verification failed:', jwtError);
       return res.status(401).json({ message: 'Invalid or expired token' });
     }
   } catch (error) {
     console.error('Logout error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        message: 'Internal server error',
+        error: error.message 
+      });
+    } else {
+      res.status(500).json({ message: 'Internal server error' });
+    }
   }
 };
 
 export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>, res: Response) => {
   try {
+    console.log('Processing refresh token request');
     const { refreshToken } = req.body;
     
     if (!refreshToken) {
+      console.log('Missing refresh token');
       return res.status(400).json({ message: 'Refresh token is required' });
     }
     
-    // TODO: Implementation will be added later
-    // This will:
-    // 1. Verify the refresh token
-    // 2. Generate new access token
-    // 3. Return new token
+    try {
+      // Verify the refresh token's JWT format and type
+      const decoded = jwt.verify(refreshToken, JWT_SECRET) as { userId: string, type: string };
+      
+      if (decoded.type !== 'refresh') {
+        console.log('Invalid token type for refresh');
+        return res.status(401).json({ message: 'Invalid token type' });
+      }
+      
+      // Check if the refresh token exists and is valid in the database
+      const storedToken = await queries.getRefreshToken(refreshToken);
+      
+      if (!storedToken) {
+        console.log('Refresh token not found or revoked');
+        return res.status(401).json({ message: 'Invalid or expired refresh token' });
+      }
+      
+      // Check if the token has expired
+      if (new Date() > new Date(storedToken.expires_at)) {
+        console.log('Refresh token has expired');
+        await queries.revokeRefreshToken(refreshToken);
+        return res.status(401).json({ message: 'Refresh token has expired' });
+      }
+      
+      // Get the user
+      const user = await queries.getUserById(decoded.userId);
+      
+      if (!user) {
+        console.log('User not found for refresh token:', decoded.userId);
+        await queries.revokeRefreshToken(refreshToken);
+        return res.status(401).json({ message: 'User not found' });
+      }
+      
+      // Generate new tokens
+      const newAccessToken = generateAccessToken(user.id);
+      const newRefreshToken = generateRefreshToken(user.id);
+      
+      // Revoke the old refresh token
+      await queries.revokeRefreshToken(refreshToken);
+      
+      // Store the new refresh token
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+      await queries.createRefreshToken(user.id, newRefreshToken, expiresAt);
+      
+      console.log(`Tokens refreshed successfully for user: ${user.id}`);
+      
+      res.json({
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken
+      });
+    } catch (jwtError) {
+      console.log('JWT verification failed:', jwtError);
+      return res.status(401).json({ message: 'Invalid refresh token' });
+    }
     
-    res.status(501).json({ message: 'Not implemented' });
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Refresh token error:', error);
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        message: 'Internal server error',
+        error: error.message 
+      });
+    } else {
+      res.status(500).json({ message: 'Internal server error' });
+    }
   }
 };
 
 export const revokeAllSessions = async (req: AuthRequest, res: Response) => {
   try {
+    console.log('Processing revoke all sessions request');
     const authHeader = req.headers.authorization;
     
     if (!authHeader?.startsWith('Bearer ')) {
+      console.log('Missing or invalid authorization header');
       return res.status(401).json({ message: 'Missing or invalid token' });
     }
     
-    // TODO: Implementation will be added later
-    // This will:
-    // 1. Get user ID from token
-    // 2. Invalidate all refresh tokens for the user
-    // 3. Clear any session data
+    const token = authHeader.split(' ')[1];
     
-    res.status(501).json({ message: 'Not implemented' });
+    try {
+      // Verify and decode the access token
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string, type: string };
+      
+      // Verify token type
+      if (decoded.type !== 'access') {
+        console.log('Invalid token type for session revocation');
+        return res.status(401).json({ message: 'Invalid token type' });
+      }
+      
+      // Verify user exists
+      const user = await queries.getUserById(decoded.userId);
+      if (!user) {
+        console.log('User not found:', decoded.userId);
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Revoke all refresh tokens for the user
+      await queries.revokeAllUserRefreshTokens(decoded.userId);
+      
+      console.log(`All sessions revoked for user: ${decoded.userId}`);
+      
+      res.json({ 
+        message: 'All sessions have been revoked successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (jwtError) {
+      console.log('JWT verification failed:', jwtError);
+      return res.status(401).json({ message: 'Invalid or expired token' });
+    }
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Revoke all sessions error:', error);
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        message: 'Internal server error',
+        error: error.message 
+      });
+    } else {
+      res.status(500).json({ message: 'Internal server error' });
+    }
   }
 };
