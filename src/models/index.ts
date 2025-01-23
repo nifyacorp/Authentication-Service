@@ -1,6 +1,25 @@
 import { getPool } from '../config/database.js';
 import type { QueryResult } from 'pg';
 
+// Debug function to log query execution
+async function executeQuery<T>(query: string, params: any[] = []): Promise<QueryResult<T>> {
+  console.log('Executing query:', {
+    text: query,
+    params: params.map(p => p === null ? 'null' : p.toString())
+  });
+  try {
+    const result = await getPool().query(query, params);
+    console.log('Query result:', {
+      rowCount: result.rowCount,
+      firstRow: result.rows[0] ? '(data)' : null
+    });
+    return result;
+  } catch (error) {
+    console.error('Query error:', error);
+    throw error;
+  }
+}
+
 export interface User {
   id: string;
   email: string;
@@ -42,7 +61,7 @@ export const queries = {
     googleId?: string,
     pictureUrl?: string
   ): Promise<User> => {
-    const result = await getPool().query(
+    const result = await executeQuery<User>(
       `INSERT INTO users (email, password_hash, name, google_id, picture_url)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
@@ -52,7 +71,7 @@ export const queries = {
   },
 
   getUserByEmail: async (email: string): Promise<User | null> => {
-    const result = await getPool().query(
+    const result = await executeQuery<User>(
       'SELECT * FROM users WHERE email = $1',
       [email]
     );
@@ -60,7 +79,7 @@ export const queries = {
   },
 
   getUserById: async (id: string): Promise<User | null> => {
-    const result = await getPool().query(
+    const result = await executeQuery<User>(
       'SELECT * FROM users WHERE id = $1',
       [id]
     );
@@ -68,7 +87,7 @@ export const queries = {
   },
 
   updateLoginAttempts: async (userId: string, attempts: number, lockUntil?: Date): Promise<void> => {
-    await getPool().query(
+    await executeQuery(
       'UPDATE users SET login_attempts = $1, locked_until = $2 WHERE id = $3',
       [attempts, lockUntil, userId]
     );
@@ -76,7 +95,7 @@ export const queries = {
 
   // Refresh token queries
   createRefreshToken: async (userId: string, token: string, expiresAt: Date): Promise<RefreshToken> => {
-    const result = await getPool().query(
+    const result = await executeQuery<RefreshToken>(
       `INSERT INTO refresh_tokens (user_id, token, expires_at)
        VALUES ($1, $2, $3)
        RETURNING *`,
@@ -86,7 +105,7 @@ export const queries = {
   },
 
   getRefreshToken: async (token: string): Promise<RefreshToken | null> => {
-    const result = await getPool().query(
+    const result = await executeQuery<RefreshToken>(
       'SELECT * FROM refresh_tokens WHERE token = $1 AND revoked = false',
       [token]
     );
@@ -94,14 +113,14 @@ export const queries = {
   },
 
   revokeRefreshToken: async (token: string): Promise<void> => {
-    await getPool().query(
+    await executeQuery(
       'UPDATE refresh_tokens SET revoked = true WHERE token = $1',
       [token]
     );
   },
 
   revokeAllUserRefreshTokens: async (userId: string): Promise<void> => {
-    await getPool().query(
+    await executeQuery(
       'UPDATE refresh_tokens SET revoked = true WHERE user_id = $1',
       [userId]
     );
@@ -109,7 +128,7 @@ export const queries = {
 
   // Password reset queries
   createPasswordReset: async (userId: string, token: string, expiresAt: Date): Promise<PasswordResetRequest> => {
-    const result = await getPool().query(
+    const result = await executeQuery<PasswordResetRequest>(
       `INSERT INTO password_reset_requests (user_id, token, expires_at)
        VALUES ($1, $2, $3)
        RETURNING *`,
@@ -119,7 +138,7 @@ export const queries = {
   },
 
   getPasswordReset: async (token: string): Promise<PasswordResetRequest | null> => {
-    const result = await getPool().query(
+    const result = await executeQuery<PasswordResetRequest>(
       'SELECT * FROM password_reset_requests WHERE token = $1 AND used = false AND expires_at > NOW()',
       [token]
     );
@@ -127,7 +146,7 @@ export const queries = {
   },
 
   markPasswordResetUsed: async (token: string): Promise<void> => {
-    await getPool().query(
+    await executeQuery(
       'UPDATE password_reset_requests SET used = true WHERE token = $1',
       [token]
     );

@@ -63,6 +63,32 @@ export async function initializePool(): Promise<void> {
     // Test the connection
     await pool.connect();
     console.log('Database connected successfully');
+
+    // Debug: Check database schema
+    try {
+      const tableCheck = await pool.query(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+        ORDER BY table_name;
+      `);
+      console.log('Available tables:', tableCheck.rows.map(row => row.table_name));
+
+      // Check users table structure
+      if (tableCheck.rows.some(row => row.table_name === 'users')) {
+        const userColumns = await pool.query(`
+          SELECT column_name, data_type, is_nullable
+          FROM information_schema.columns
+          WHERE table_name = 'users'
+          ORDER BY ordinal_position;
+        `);
+        console.log('Users table structure:', userColumns.rows);
+      } else {
+        console.log('Users table not found - schema might not be initialized');
+      }
+    } catch (schemaError) {
+      console.error('Error checking database schema:', schemaError);
+    }
   } catch (err) {
     console.error('Database connection error:', err instanceof Error ? err.stack : err);
     throw err;
