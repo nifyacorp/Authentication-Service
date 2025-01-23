@@ -5,18 +5,17 @@ import { config } from 'dotenv';
 const { Pool } = pkg;
 config();
 
-const {
-  DB_HOST = '/cloudsql/delta-entity-447812-p2:us-central1:auth-service-db',
-  DB_USER = 'auth_service',
-  DB_NAME = 'auth_db',
-  DB_PORT = '5432',
-} = process.env;
+// Required database configuration
+const DB_HOST = process.env.DB_HOST;
+const DB_USER = process.env.DB_USER;
+const DB_NAME = process.env.DB_NAME;
+const DB_PORT = process.env.DB_PORT;
 
 const secretManagerClient = new SecretManagerServiceClient();
 
 async function getDbPassword(): Promise<string> {
   try {
-    const secretName = 'projects/delta-entity-447812-p2/secrets/auth-db-password/versions/latest';
+    const secretName = 'projects/delta-entity-447812-p2/secrets/auth-db-app-password/versions/latest';
     const [version] = await secretManagerClient.accessSecretVersion({ name: secretName });
     
     if (!version.payload?.data) {
@@ -25,7 +24,8 @@ async function getDbPassword(): Promise<string> {
 
     return version.payload.data.toString();
   } catch (error) {
-    console.error('Error retrieving secret:', error);
+    console.error('Failed to retrieve database password from Secret Manager:', error);
+    
     throw new Error('Failed to retrieve database credentials');
   }
 }
@@ -34,6 +34,15 @@ let pool: pkg.Pool;
 
 export async function initializePool(): Promise<void> {
   try {
+    // Validate required configuration
+    if (!DB_HOST || !DB_USER || !DB_NAME || !DB_PORT) {
+      throw new Error(
+        'Missing required database configuration. ' +
+        'Please ensure DB_HOST, DB_USER, DB_NAME, and DB_PORT ' +
+        'are properly configured.'
+      );
+    }
+
     const dbPassword = await getDbPassword();
     
     pool = new Pool({
@@ -52,7 +61,7 @@ export async function initializePool(): Promise<void> {
     console.log('Database connected successfully');
   } catch (err) {
     console.error('Database connection error:', err);
-    process.exit(1);
+    throw err; // Let the caller handle the error
   }
 }
 
