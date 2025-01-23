@@ -1,7 +1,8 @@
-import { Pool } from 'pg';
+import pkg from 'pg';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { config } from 'dotenv';
 
+const { Pool } = pkg;
 config();
 
 const {
@@ -29,7 +30,7 @@ async function getDbPassword(): Promise<string> {
   }
 }
 
-let pool: Pool;
+let pool: pkg.Pool;
 
 export async function initializePool(): Promise<void> {
   try {
@@ -55,7 +56,7 @@ export async function initializePool(): Promise<void> {
   }
 }
 
-export function getPool(): Pool {
+export function getPool(): pkg.Pool {
   if (!pool) {
     throw new Error('Database pool not initialized');
   }
