@@ -10,8 +10,7 @@ npm-debug.log
 .env
 .env.*
 
-# Development
-src
+# Test files
 tests
 *.test.ts
 *.spec.ts
