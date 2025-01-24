@@ -101,16 +101,16 @@ export const queries = {
   updateUserProfile: async (
     userId: string,
     data: {
-      googleId?: string | null;
-      name?: string | null;
-      pictureUrl?: string | null;
+      googleId?: string | undefined;
+      name?: string | undefined;
+      pictureUrl?: string | undefined;
     }
   ): Promise<void> => {
     await executeQuery(
       `UPDATE users 
-       SET google_id = COALESCE($1, google_id),
-           name = COALESCE($2, name),
-           picture_url = COALESCE($3, picture_url),
+       SET google_id = $1,
+           name = $2,
+           picture_url = $3,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $4`,
       [data.googleId, data.name, data.pictureUrl, userId]
