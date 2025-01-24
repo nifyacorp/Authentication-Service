@@ -1,7 +1,13 @@
 import { Request, Response } from 'express';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
-import crypto from 'crypto';
-import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, GOOGLE_SCOPES } from '../../config/oauth.js';
+import { 
+  GOOGLE_CLIENT_ID, 
+  GOOGLE_CLIENT_SECRET, 
+  GOOGLE_REDIRECT_URI, 
+  GOOGLE_SCOPES,
+  generateStateToken,
+  validateStateToken
+} from '../../config/oauth.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 
 const oAuth2Client = new OAuth2Client(
@@ -10,19 +16,6 @@ const oAuth2Client = new OAuth2Client(
   GOOGLE_REDIRECT_URI
 );
 
-// In-memory state storage (replace with Redis/database in production)
-const stateStore = new Map<string, { timestamp: number }>();
-
-// Clean up expired states periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [state, data] of stateStore.entries()) {
-    if (now - data.timestamp > 10 * 60 * 1000) { // 10 minutes
-      stateStore.delete(state);
-    }
-  }
-}, 60 * 1000); // Clean up every minute
-
 export const getGoogleAuthUrl = async (req: Request, res: Response) => {
   try {
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
@@ -30,21 +23,24 @@ export const getGoogleAuthUrl = async (req: Request, res: Response) => {
       return res.status(500).json({ message: 'OAuth configuration error' });
     }
 
-    // Generate a random state token
-    const state = crypto.randomBytes(32).toString('hex');
-
-    // Store the state token with timestamp
-    stateStore.set(state, { timestamp: Date.now() });
+    // Generate state token and nonce
+    const { state, nonce } = generateStateToken();
 
     // Generate the authorization URL
-    const authorizeUrl = oAuth2Client.generateAuthUrl({
+    const authUrl = oAuth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: GOOGLE_SCOPES,
       state: state,
       prompt: 'consent'
     });
 
-    res.json({ authUrl: authorizeUrl });
+    res.json({ 
+      authUrl,
+      state,
+      nonce,
+      expiresIn: 600, // 10 minutes in seconds
+      scope: GOOGLE_SCOPES.join(' ')
+    });
   } catch (error) {
     console.error('Google OAuth URL generation error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -53,24 +49,27 @@ export const getGoogleAuthUrl = async (req: Request, res: Response) => {
 
 export const handleGoogleCallback = async (req: Request, res: Response) => {
   try {
-    const { state, code, error } = req.query;
+    const { state, code, error, nonce } = req.query;
 
     // Handle OAuth errors
     if (error) {
       console.error('Google OAuth error:', error);
       return res.status(400).json({ message: 'OAuth authentication failed' });
     }
-
+    
     // Validate state parameter
-    if (!state || !stateStore.has(state as string)) {
-      return res.status(400).json({ message: 'Invalid state parameter' });
+    if (!state || typeof state !== 'string') {
+      return res.status(400).json({ message: 'Missing state parameter' });
     }
 
-    // Clean up used state
-    stateStore.delete(state as string);
-
     if (!code) {
-      return res.status(400).json({ message: 'Authorization code is required' });
+      return res.status(400).json({ message: 'Missing authorization code' });
+    }
+
+    // Validate state token and nonce
+    if (!validateStateToken(state, nonce as string)) {
+      console.error('Invalid or expired state token');
+      return res.status(400).json({ message: 'Invalid state parameter' });
     }
 
     // Exchange authorization code for tokens
@@ -89,49 +88,39 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
     }
 
     try {
-      // TODO: Replace with actual database operations
       // Check if user exists
-      let user = {
-        id: 'user-id',
-        email: payload.email,
-        name: payload.name || '',
-        picture: payload.picture || '',
-        emailVerified: true,
-        googleId: payload.sub,
-        firstLogin: false
-      };
+      let user = await queries.getUserByEmail(payload.email);
+      let isNewUser = false;
 
-      const isNewUser = false; // This would be determined by the database query
+      if (!user) {
+        isNewUser = true;
+        // Create new user with Google profile data
+        user = await queries.createUser(
+          payload.email,
+          null, // No password for Google users
+          payload.name || payload.email.split('@')[0], // Use name or email prefix
+          payload.sub, // Google ID
+          payload.picture || null
+        );
 
-      if (isNewUser) {
-        // Create new user
-        user = {
-          id: crypto.randomUUID(),
-          email: payload.email,
-          name: payload.name || '',
-          picture: payload.picture || '',
-          emailVerified: true,
-          googleId: payload.sub,
-          firstLogin: true
-        };
-
-        // TODO: Save new user to database
         console.log('New user registered via Google:', user.id);
-
-        try {
-          // TODO: Send welcome email
-          // await sendEmail({
-          //   to: user.email,
-          //   subject: 'Welcome to Our Platform',
-          //   template: 'welcome',
-          //   context: { name: user.name }
-          // });
-        } catch (emailError) {
-          // Log but don't fail the request
-          console.error('Failed to send welcome email:', emailError);
-        }
       } else {
-        // TODO: Update existing user's Google-related info
+        // Update existing user's Google profile info if needed
+        if (
+          user.google_id !== payload.sub ||
+          user.name !== payload.name ||
+          user.picture_url !== payload.picture
+        ) {
+          await executeQuery(
+            `UPDATE users 
+             SET google_id = $1, 
+                 name = COALESCE($2, name),
+                 picture_url = $3,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $4`,
+            [payload.sub, payload.name, payload.picture, user.id]
+          );
+        }
         console.log('Existing user logged in via Google:', user.id);
       }
 
@@ -139,13 +128,10 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
       const accessToken = generateAccessToken(user.id);
       const refreshToken = generateRefreshToken(user.id);
 
-      // TODO: Save refresh token to database
-      // await db.refreshToken.create({
-      //   data: {
-      //     token: refreshToken,
-      //     userId: user.id
-      //   }
-      // });
+      // Store refresh token
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+      await queries.createRefreshToken(user.id, refreshToken, expiresAt);
 
       // Return user data and tokens
       res.json({
@@ -153,8 +139,8 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
           id: user.id,
           email: user.email,
           name: user.name,
-          picture: user.picture,
-          firstLogin: user.firstLogin
+          picture: user.picture_url,
+          firstLogin: isNewUser
         },
         accessToken,
         refreshToken
