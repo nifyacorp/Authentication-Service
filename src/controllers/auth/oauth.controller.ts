@@ -115,8 +115,8 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
           // Update user profile using queries
           await queries.updateUserProfile(user.id, {
             googleId: payload.sub,
-            name: payload.name ?? undefined,
-            pictureUrl: payload.picture ?? undefined
+            name: payload.name || null,
+            pictureUrl: payload.picture || null
           });
         }
         console.log('Existing user logged in via Google:', user.id);

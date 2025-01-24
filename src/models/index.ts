@@ -101,9 +101,9 @@ export const queries = {
   updateUserProfile: async (
     userId: string,
     data: {
-      googleId?: string | undefined;
-      name?: string | undefined;
-      pictureUrl?: string | undefined;
+      googleId?: string | null;
+      name?: string | null;
+      pictureUrl?: string | null;
     }
   ): Promise<void> => {
     await executeQuery(
