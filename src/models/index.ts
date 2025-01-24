@@ -57,7 +57,7 @@ export const queries = {
   // User queries
   createUser: async (
     email: string,
-    passwordHash: string,
+    passwordHash: string | null,
     name: string,
     googleId?: string,
     pictureUrl?: string
