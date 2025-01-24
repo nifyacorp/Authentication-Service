@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { authRouter } from './routes/auth.js';
 import { initializePool } from './config/database.js';
+import { initializeOAuthConfig } from './config/oauth.js';
 import { Request, Response, NextFunction } from 'express';
 
 const app = express();
@@ -42,12 +43,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Initialize database pool and start server
-initializePool().then(() => {
+// Initialize services and start server
+Promise.all([
+  initializePool(),
+  initializeOAuthConfig()
+]).then(() => {
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on port ${port}`);
   });
 }).catch(error => {
-  console.error('Failed to initialize database:', error);
+  console.error('Failed to initialize services:', error);
   process.exit(1);
 });

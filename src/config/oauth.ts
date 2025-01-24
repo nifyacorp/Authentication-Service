@@ -1,14 +1,62 @@
 import { config } from 'dotenv';
 import crypto from 'crypto';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 config();
 
-export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const secretManagerClient = new SecretManagerServiceClient();
+
+async function getSecret(secretName: string): Promise<string> {
+  try {
+    const name = `projects/delta-entity-447812-p2/secrets/${secretName}/versions/latest`;
+    const [version] = await secretManagerClient.accessSecretVersion({ name });
+    
+    if (!version.payload?.data) {
+      throw new Error(`Failed to retrieve ${secretName} from Secret Manager`);
+    }
+
+    return version.payload.data.toString();
+  } catch (error) {
+    console.error(`Failed to retrieve ${secretName}:`, error);
+    throw error;
+  }
+}
+
+let GOOGLE_CLIENT_ID = '';
+let GOOGLE_CLIENT_SECRET = '';
+
+export async function initializeOAuthConfig(): Promise<void> {
+  try {
+    [GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET] = await Promise.all([
+      getSecret('OAUTH_CLIENT'),
+      getSecret('OAUTH_SECRET')
+    ]);
+    console.log('OAuth configuration initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize OAuth configuration:', error);
+    throw error;
+  }
+}
+
+export function getGoogleCredentials() {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    throw new Error('OAuth credentials not initialized');
+  }
+  return {
+    clientId: GOOGLE_CLIENT_ID,
+    clientSecret: GOOGLE_CLIENT_SECRET
+  };
+}
+
 export const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/google/callback';
+
+// OAuth scopes for user profile and email
 export const GOOGLE_SCOPES = [
-  'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/userinfo.profile'
+  'openid',                    // Required for OpenID Connect
+  'email',                     // User's email address
+  'profile',                   // Basic profile information
+  'https://www.googleapis.com/auth/userinfo.email',     // Email address (read-only)
+  'https://www.googleapis.com/auth/userinfo.profile'    // Basic profile info (read-only)
 ];
 
 // State token configuration

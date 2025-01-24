@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import { queries } from '../../models/index.js';
-import { 
-  GOOGLE_CLIENT_ID, 
-  GOOGLE_CLIENT_SECRET, 
+import {
+  getGoogleCredentials,
   GOOGLE_REDIRECT_URI, 
   GOOGLE_SCOPES,
   generateStateToken,
@@ -11,15 +10,24 @@ import {
 } from '../../config/oauth.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 
-const oAuth2Client = new OAuth2Client(
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
-  GOOGLE_REDIRECT_URI
-);
+let oAuth2Client: OAuth2Client;
+
+function getOAuthClient() {
+  if (!oAuth2Client) {
+    const { clientId, clientSecret } = getGoogleCredentials();
+    oAuth2Client = new OAuth2Client(
+      clientId,
+      clientSecret,
+      GOOGLE_REDIRECT_URI
+    );
+  }
+  return oAuth2Client;
+}
 
 export const getGoogleAuthUrl = async (req: Request, res: Response) => {
   try {
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    const { clientId, clientSecret } = getGoogleCredentials();
+    if (!clientId || !clientSecret) {
       console.error('Google OAuth credentials not configured');
       return res.status(500).json({ message: 'OAuth configuration error' });
     }
@@ -28,7 +36,7 @@ export const getGoogleAuthUrl = async (req: Request, res: Response) => {
     const { state, nonce } = generateStateToken();
 
     // Generate the authorization URL
-    const authUrl = oAuth2Client.generateAuthUrl({
+    const authUrl = getOAuthClient().generateAuthUrl({
       access_type: 'offline',
       scope: GOOGLE_SCOPES,
       state: state,
@@ -74,13 +82,15 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
     }
 
     // Exchange authorization code for tokens
-    const { tokens } = await oAuth2Client.getToken(code as string);
-    oAuth2Client.setCredentials(tokens);
+    const client = getOAuthClient();
+    const { tokens } = await client.getToken(code as string);
+    client.setCredentials(tokens);
 
     // Verify ID token and get user info
-    const ticket = await oAuth2Client.verifyIdToken({
+    const { clientId } = getGoogleCredentials();
+    const ticket = await client.verifyIdToken({
       idToken: tokens.id_token!,
-      audience: GOOGLE_CLIENT_ID
+      audience: clientId
     });
 
     const payload = ticket.getPayload() as TokenPayload;
