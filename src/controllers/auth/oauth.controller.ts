@@ -99,9 +99,9 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
         user = await queries.createUser(
           payload.email,
           null, // No password for Google users
-          payload.name || payload.email.split('@')[0], // Use name or email prefix
+          payload.name || payload.email.split('@')[0],
           payload.sub, // Google ID
-          payload.picture || null
+          payload.picture || undefined
         );
 
         console.log('New user registered via Google:', user.id);
@@ -115,8 +115,8 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
           // Update user profile using queries
           await queries.updateUserProfile(user.id, {
             googleId: payload.sub,
-            name: payload.name || null,
-            pictureUrl: payload.picture || null
+            name: payload.name || undefined,
+            pictureUrl: payload.picture || undefined
           });
         }
         console.log('Existing user logged in via Google:', user.id);
