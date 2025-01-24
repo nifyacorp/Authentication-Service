@@ -98,6 +98,25 @@ export const queries = {
     return result.rows[0] || null;
   },
 
+  updateUserProfile: async (
+    userId: string,
+    data: {
+      googleId?: string;
+      name?: string;
+      pictureUrl?: string;
+    }
+  ): Promise<void> => {
+    await executeQuery(
+      `UPDATE users 
+       SET google_id = COALESCE($1, google_id),
+           name = COALESCE($2, name),
+           picture_url = COALESCE($3, picture_url),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [data.googleId, data.name, data.pictureUrl, userId]
+    );
+  },
+
   updateLoginAttempts: async (userId: string, attempts: number, lockUntil?: Date): Promise<void> => {
     await executeQuery(
       'UPDATE users SET login_attempts = $1, locked_until = $2 WHERE id = $3',

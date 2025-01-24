@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
+import { queries } from '../../models/index.js';
 import { 
   GOOGLE_CLIENT_ID, 
   GOOGLE_CLIENT_SECRET, 
@@ -111,15 +112,12 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
           user.name !== payload.name ||
           user.picture_url !== payload.picture
         ) {
-          await executeQuery(
-            `UPDATE users 
-             SET google_id = $1, 
-                 name = COALESCE($2, name),
-                 picture_url = $3,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $4`,
-            [payload.sub, payload.name, payload.picture, user.id]
-          );
+          // Update user profile using queries
+          await queries.updateUserProfile(user.id, {
+            googleId: payload.sub,
+            name: payload.name,
+            pictureUrl: payload.picture
+          });
         }
         console.log('Existing user logged in via Google:', user.id);
       }
