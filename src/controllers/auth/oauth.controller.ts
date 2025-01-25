@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import { queries } from '../../models/index.js';
+import { getJwtSecret } from '../../config/jwt.js';
 import {
   getGoogleCredentials,
   GOOGLE_REDIRECT_URI, 
