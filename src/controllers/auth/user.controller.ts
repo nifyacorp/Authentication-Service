@@ -270,8 +270,9 @@ export const verifyEmail = async (req: Request<{}, {}, VerifyEmailBody>, res: Re
     }
 
     try {
+      const secret = await getJwtSecret();
       // Verify and decode the token
-      const decoded = jwt.verify(token, JWT_SECRET) as {
+      const decoded = jwt.verify(token, secret) as {
         userId: string;
         type: string;
         email: string;

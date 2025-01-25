@@ -68,6 +68,7 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
     }
     
     try {
+      const secret = await getJwtSecret();
       // Verify the refresh token's JWT format and type
       const decoded = jwt.verify(refreshToken, secret) as { sub: string, type: string };
       
@@ -151,6 +152,7 @@ export const revokeAllSessions = async (req: AuthRequest, res: Response) => {
     const token = authHeader.split(' ')[1];
     
     try {
+      const secret = await getJwtSecret();
       // Verify and decode the access token
       const decoded = jwt.verify(token, secret) as { sub: string, type: string };
       
