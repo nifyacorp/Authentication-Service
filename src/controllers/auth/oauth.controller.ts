@@ -86,6 +86,7 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
     const { tokens } = await client.getToken(code as string);
     client.setCredentials(tokens);
 
+    const secret = await getJwtSecret();
     // Verify ID token and get user info
     const { clientId } = getGoogleCredentials();
     const ticket = await client.verifyIdToken({
@@ -133,8 +134,10 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
       }
 
       // Generate application tokens
-      const accessToken = generateAccessToken(user.id);
-      const refreshToken = generateRefreshToken(user.id);
+      const [accessToken, refreshToken] = await Promise.all([
+        generateAccessToken(user.id),
+        generateRefreshToken(user.id)
+      ]);
 
       // Store refresh token
       const expiresAt = new Date();
