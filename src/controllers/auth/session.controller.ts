@@ -18,7 +18,7 @@ export const logout = async (req: AuthRequest, res: Response) => {
     const token = authHeader.split(' ')[1];
     
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string, type: string };
+      const decoded = jwt.verify(token, JWT_SECRET) as { sub: string, type: string };
 
       // Verify token type
       if (decoded.type !== 'access') {
@@ -27,16 +27,16 @@ export const logout = async (req: AuthRequest, res: Response) => {
       }
       
       // Get user from database to verify existence
-      const user = await queries.getUserById(decoded.userId);
+      const user = await queries.getUserById(decoded.sub);
       if (!user) {
-        console.log('User not found for logout:', decoded.userId);
+        console.log('User not found for logout:', decoded.sub);
         return res.status(401).json({ message: 'Invalid token' });
       }
 
       // Revoke all refresh tokens for the user
-      await queries.revokeAllUserRefreshTokens(decoded.userId);
+      await queries.revokeAllUserRefreshTokens(decoded.sub);
       
-      console.log(`User ${decoded.userId} logged out successfully`);
+      console.log(`User ${decoded.sub} logged out successfully`);
       
       res.status(200).json({ message: 'Logged out successfully' });
     } catch (jwtError) {
@@ -68,7 +68,7 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
     
     try {
       // Verify the refresh token's JWT format and type
-      const decoded = jwt.verify(refreshToken, JWT_SECRET) as { userId: string, type: string };
+      const decoded = jwt.verify(refreshToken, JWT_SECRET) as { sub: string, type: string };
       
       if (decoded.type !== 'refresh') {
         console.log('Invalid token type for refresh');
@@ -91,10 +91,10 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       }
       
       // Get the user
-      const user = await queries.getUserById(decoded.userId);
+      const user = await queries.getUserById(decoded.sub);
       
       if (!user) {
-        console.log('User not found for refresh token:', decoded.userId);
+        console.log('User not found for refresh token:', decoded.sub);
         await queries.revokeRefreshToken(refreshToken);
         return res.status(401).json({ message: 'User not found' });
       }
@@ -149,7 +149,7 @@ export const revokeAllSessions = async (req: AuthRequest, res: Response) => {
     
     try {
       // Verify and decode the access token
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string, type: string };
+      const decoded = jwt.verify(token, JWT_SECRET) as { sub: string, type: string };
       
       // Verify token type
       if (decoded.type !== 'access') {
@@ -158,16 +158,16 @@ export const revokeAllSessions = async (req: AuthRequest, res: Response) => {
       }
       
       // Verify user exists
-      const user = await queries.getUserById(decoded.userId);
+      const user = await queries.getUserById(decoded.sub);
       if (!user) {
-        console.log('User not found:', decoded.userId);
+        console.log('User not found:', decoded.sub);
         return res.status(404).json({ message: 'User not found' });
       }
       
       // Revoke all refresh tokens for the user
-      await queries.revokeAllUserRefreshTokens(decoded.userId);
+      await queries.revokeAllUserRefreshTokens(decoded.sub);
       
-      console.log(`All sessions revoked for user: ${decoded.userId}`);
+      console.log(`All sessions revoked for user: ${decoded.sub}`);
       
       res.json({ 
         message: 'All sessions have been revoked successfully',

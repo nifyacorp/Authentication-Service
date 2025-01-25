@@ -206,7 +206,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
     const token = authHeader.split(' ')[1];
     
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string, type: string };
+      const decoded = jwt.verify(token, JWT_SECRET) as { sub: string, type: string };
 
       // Verify token type
       if (decoded.type !== 'access') {
@@ -215,14 +215,14 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
       }
       
       // Get user from database
-      const user = await queries.getUserById(decoded.userId);
+      const user = await queries.getUserById(decoded.sub);
       
       if (!user) {
-        console.log('User not found:', decoded.userId);
+        console.log('User not found:', decoded.sub);
         return res.status(404).json({ message: 'User not found' });
       }
       
-      console.log(`Profile retrieved for user: ${user.id}`);
+      console.log(`Profile retrieved for user: ${decoded.sub}`);
       
       // Transform database user to UserProfile format
       const userProfile: UserProfile = {
