@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from '../../config/jwt.js';
+import { getJwtSecret } from '../../config/jwt.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 import { queries } from '../../models/index.js';
 import { AuthRequest, RefreshTokenBody } from './types.js';
@@ -18,7 +18,8 @@ export const logout = async (req: AuthRequest, res: Response) => {
     const token = authHeader.split(' ')[1];
     
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { sub: string, type: string };
+      const secret = await getJwtSecret();
+      const decoded = jwt.verify(token, secret) as { sub: string, type: string };
 
       // Verify token type
       if (decoded.type !== 'access') {
@@ -68,7 +69,7 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
     
     try {
       // Verify the refresh token's JWT format and type
-      const decoded = jwt.verify(refreshToken, JWT_SECRET) as { sub: string, type: string };
+      const decoded = jwt.verify(refreshToken, secret) as { sub: string, type: string };
       
       if (decoded.type !== 'refresh') {
         console.log('Invalid token type for refresh');
@@ -100,8 +101,10 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       }
       
       // Generate new tokens
-      const newAccessToken = generateAccessToken(user.id);
-      const newRefreshToken = generateRefreshToken(user.id);
+      const [newAccessToken, newRefreshToken] = await Promise.all([
+        generateAccessToken(user.id),
+        generateRefreshToken(user.id)
+      ]);
       
       // Revoke the old refresh token
       await queries.revokeRefreshToken(refreshToken);
@@ -149,7 +152,7 @@ export const revokeAllSessions = async (req: AuthRequest, res: Response) => {
     
     try {
       // Verify and decode the access token
-      const decoded = jwt.verify(token, JWT_SECRET) as { sub: string, type: string };
+      const decoded = jwt.verify(token, secret) as { sub: string, type: string };
       
       // Verify token type
       if (decoded.type !== 'access') {

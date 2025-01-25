@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET, MAX_LOGIN_ATTEMPTS, LOCK_TIME } from '../../config/jwt.js';
+import { getJwtSecret, MAX_LOGIN_ATTEMPTS, LOCK_TIME } from '../../config/jwt.js';
 import { signupSchema, loginSchema } from '../../utils/validation.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 import { z } from 'zod';
@@ -85,8 +85,10 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
       await queries.updateLoginAttempts(user.id, 0, undefined);
     }
 
-    const accessToken = generateAccessToken(user.id);
-    const refreshToken = generateRefreshToken(user.id);
+    const [accessToken, refreshToken] = await Promise.all([
+      generateAccessToken(user.id),
+      generateRefreshToken(user.id)
+    ]);
     
     // Store refresh token
     const expiresAt = new Date();
@@ -160,8 +162,10 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response) =>
     console.log('User created successfully:', user.id);
 
     // Generate tokens
-    const accessToken = generateAccessToken(user.id);
-    const refreshToken = generateRefreshToken(user.id);
+    const [accessToken, refreshToken] = await Promise.all([
+      generateAccessToken(user.id),
+      generateRefreshToken(user.id)
+    ]);
 
     // Store refresh token
     const expiresAt = new Date();
@@ -206,7 +210,8 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
     const token = authHeader.split(' ')[1];
     
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { sub: string, type: string };
+      const secret = await getJwtSecret();
+      const decoded = jwt.verify(token, secret) as { sub: string, type: string };
 
       // Verify token type
       if (decoded.type !== 'access') {

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { signupSchema } from '../../utils/validation.js';
-import { JWT_SECRET, RESET_TOKEN_EXPIRES_IN, MAX_PASSWORD_RESET_REQUESTS, PASSWORD_RESET_WINDOW } from '../../config/jwt.js';
+import { getJwtSecret, RESET_TOKEN_EXPIRES_IN, MAX_PASSWORD_RESET_REQUESTS, PASSWORD_RESET_WINDOW } from '../../config/jwt.js';
 import { AuthRequest, ForgotPasswordBody, ResetPasswordBody, ChangePasswordBody } from './types.js';
 
 export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, res: Response) => {
@@ -38,12 +38,13 @@ export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, r
       });
     }
 
+    const secret = await getJwtSecret();
     const resetToken = jwt.sign(
       { 
         userId: user.id,
         type: 'password_reset'
       },
-      JWT_SECRET,
+      secret,
       { expiresIn: RESET_TOKEN_EXPIRES_IN }
     );
 
@@ -80,6 +81,7 @@ export const changePassword = async (req: Request<{}, {}, ChangePasswordBody>, r
   try {
     const { currentPassword, newPassword } = req.body;
     const authHeader = req.headers.authorization;
+    const secret = await getJwtSecret();
 
     if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({ message: 'Missing or invalid token' });
@@ -89,7 +91,7 @@ export const changePassword = async (req: Request<{}, {}, ChangePasswordBody>, r
     let userId: string;
 
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      const decoded = jwt.verify(token, secret) as { userId: string };
       userId = decoded.userId;
     } catch (jwtError) {
       return res.status(401).json({ message: 'Invalid or expired token' });

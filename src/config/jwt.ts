@@ -1,8 +1,33 @@
 import { config } from 'dotenv';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 config();
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const secretManagerClient = new SecretManagerServiceClient();
+
+let JWT_SECRET_VALUE: string | null = null;
+
+export async function getJwtSecret(): Promise<string> {
+  if (JWT_SECRET_VALUE) {
+    return JWT_SECRET_VALUE;
+  }
+
+  try {
+    const secretName = 'projects/delta-entity-447812-p2/secrets/jwt-secret/versions/latest';
+    const [version] = await secretManagerClient.accessSecretVersion({ name: secretName });
+    
+    if (!version.payload?.data) {
+      throw new Error('Failed to retrieve JWT secret from Secret Manager');
+    }
+
+    JWT_SECRET_VALUE = version.payload.data.toString();
+    return JWT_SECRET_VALUE;
+  } catch (error) {
+    console.error('Failed to retrieve JWT secret:', error);
+    throw new Error('Failed to retrieve JWT secret');
+  }
+}
+
 export const ACCESS_TOKEN_EXPIRES_IN = '15m';
 export const REFRESH_TOKEN_EXPIRES_IN = '7d';
 export const MAX_LOGIN_ATTEMPTS = 5;
