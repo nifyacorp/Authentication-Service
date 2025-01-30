@@ -1,5 +1,4 @@
 import { getPool } from '../config/database.js';
-import { publishUserCreated } from '../config/pubsub.js';
 import type { QueryResult, QueryResultRow } from 'pg';
 
 // Debug function to log query execution
@@ -68,18 +67,7 @@ export const queries = {
        RETURNING *`,
       [email, passwordHash, name, googleId, pictureUrl]
     );
-    const user = result.rows[0];
-    
-    // Publish user created event
-    await publishUserCreated({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      createdAt: user.created_at.toISOString(),
-      emailVerified: user.email_verified
-    });
-    
-    return user;
+    return result.rows[0];
   },
 
   getUserByEmail: async (email: string): Promise<User | null> => {

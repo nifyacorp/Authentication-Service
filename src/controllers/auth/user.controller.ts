@@ -86,7 +86,7 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
     }
 
     const [accessToken, refreshToken] = await Promise.all([
-      generateAccessToken(user.id),
+      generateAccessToken(user.id, user.email, user.name, user.email_verified),
       generateRefreshToken(user.id)
     ]);
     
@@ -163,7 +163,7 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response) =>
 
     // Generate tokens
     const [accessToken, refreshToken] = await Promise.all([
-      generateAccessToken(user.id),
+      generateAccessToken(user.id, user.email, user.name, user.email_verified),
       generateRefreshToken(user.id)
     ]);
 
@@ -211,7 +211,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
     
     try {
       const secret = await getJwtSecret();
-      const decoded = jwt.verify(token, secret) as { sub: string, type: string };
+      const decoded = jwt.verify(token, secret) as { sub: string, email: string, type: string };
 
       // Verify token type
       if (decoded.type !== 'access') {
