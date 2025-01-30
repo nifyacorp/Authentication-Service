@@ -13,7 +13,7 @@ export async function getJwtSecret(): Promise<string> {
   }
 
   try {
-    const secretName = 'projects/415554190254/secrets/JWT_SECRET/versions/latest';
+    const secretName = 'projects/delta-entity-447812-p2/secrets/JWT_SECRET/versions/latest';
     const [version] = await secretManagerClient.accessSecretVersion({ name: secretName });
     
     if (!version.payload?.data) {
