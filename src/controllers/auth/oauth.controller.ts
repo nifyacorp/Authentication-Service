@@ -134,10 +134,10 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
         console.log('Existing user logged in via Google:', user.id);
       }
 
-      // Generate application tokens
+      // Generate application tokens with required claims
       const [accessToken, refreshToken] = await Promise.all([
-        generateAccessToken(user.id),
-        generateRefreshToken(user.id)
+        generateAccessToken(user.id, user.email, user.name, user.email_verified),
+        generateRefreshToken(user.id, user.email)
       ]);
 
       // Store refresh token

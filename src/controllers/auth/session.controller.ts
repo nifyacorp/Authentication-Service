@@ -70,7 +70,7 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
     try {
       const secret = await getJwtSecret();
       // Verify the refresh token's JWT format and type
-      const decoded = jwt.verify(refreshToken, secret) as { sub: string, type: string };
+      const decoded = jwt.verify(refreshToken, secret) as { sub: string, type: string, email: string };
       
       if (decoded.type !== 'refresh') {
         console.log('Invalid token type for refresh');
@@ -101,10 +101,10 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
         return res.status(401).json({ message: 'User not found' });
       }
       
-      // Generate new tokens
+      // Generate new tokens with required claims
       const [newAccessToken, newRefreshToken] = await Promise.all([
-        generateAccessToken(user.id),
-        generateRefreshToken(user.id)
+        generateAccessToken(user.id, user.email, user.name, user.email_verified),
+        generateRefreshToken(user.id, user.email)
       ]);
       
       // Revoke the old refresh token

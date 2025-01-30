@@ -34,10 +34,14 @@ export const generateAccessToken = async (
   );
 };
 
-export const generateRefreshToken = async (sub: string): Promise<string> => {
+export const generateRefreshToken = async (sub: string, email: string): Promise<string> => {
   const secret = await getJwtSecret();
   return jwt.sign(
-    { sub, type: 'refresh' },
+    { 
+      sub, 
+      email,
+      type: 'refresh' 
+    },
     secret,
     { expiresIn: REFRESH_TOKEN_EXPIRES_IN }
   );
