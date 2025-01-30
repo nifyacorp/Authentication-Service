@@ -87,7 +87,7 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
 
     const [accessToken, refreshToken] = await Promise.all([
       generateAccessToken(user.id, user.email, user.name, user.email_verified),
-      generateRefreshToken(user.id)
+      generateRefreshToken(user.id, user.email)
     ]);
     
     // Store refresh token
@@ -164,7 +164,7 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response) =>
     // Generate tokens
     const [accessToken, refreshToken] = await Promise.all([
       generateAccessToken(user.id, user.email, user.name, user.email_verified),
-      generateRefreshToken(user.id)
+      generateRefreshToken(user.id, user.email)
     ]);
 
     // Store refresh token
