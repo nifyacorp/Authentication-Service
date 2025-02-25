@@ -10,6 +10,7 @@ const port = parseInt(process.env.PORT || '8080', 10); // Convert to number
 
 // CORS configuration
 const corsOptions = {
+  origin: ['https://clever-kelpie-60c3a6.netlify.app', 'http://localhost:5173', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
