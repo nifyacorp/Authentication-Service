@@ -13,6 +13,40 @@ This service provides a complete authentication system with various endpoints fo
 - Database-backed token storage
 - Row Level Security (RLS) for data protection
 
+## Integration with NIFYA Ecosystem
+
+The Authentication Service is a critical component of the NIFYA platform, providing identity management for all microservices:
+
+- **Frontend**: Provides JWT tokens for authenticated sessions and handles user login/registration flows
+- **Backend API**: Validates authentication tokens for protected routes
+- **Notification Worker**: Uses user identity for sending personalized notifications
+- **Subscription Worker**: Associates subscriptions with authenticated users
+- **BOE Parser**: User identity is used to filter relevant documents
+- **Email Notification Service**: Securely delivers messages to verified users
+
+### Communication Flow
+
+```
+┌─────────────┐     Auth      ┌─────────────┐
+│   Frontend  │◄────Flow─────►│   Auth      │
+└─────────────┘               │   Service   │
+       ▲                      └─────────────┘
+       │                             ▲
+       │                             │
+       ▼                             ▼
+┌─────────────┐    Validation  ┌─────────────┐
+│  Backend    │◄───────────────┤  PubSub     │
+│  API        │                │  Events     │
+└─────────────┘                └─────────────┘
+       ▲                             ▲
+       │                             │
+       ▼                             │
+┌─────────────┐                      │
+│ Microservice│                      │
+│ Ecosystem   │◄─────────────────────┘
+└─────────────┘
+```
+
 ## Status Icons
 - ✅ Implemented and Working
 - ⚠️ Partially Implemented
@@ -121,28 +155,49 @@ This service provides a complete authentication system with various endpoints fo
 ```bash
 PORT=3000                    # Server port
 JWT_SECRET=your-secret-key   # JWT signing key
+JWT_EXPIRES_IN=1h            # JWT token expiration time
+REFRESH_TOKEN_EXPIRES_IN=7d  # Refresh token expiration
 
 # Database Configuration
 DB_HOST=your-db-host
 DB_USER=your-db-user
 DB_NAME=your-db-name
 DB_PORT=5432
+DB_PASSWORD=your-db-password
 
 # Google OAuth
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=your-redirect-uri
+
+# PubSub Configuration
+PUBSUB_TOPIC_USER_EVENTS=user-events
+GOOGLE_CLOUD_PROJECT=your-project-id
+
+# Email Notifications
+ENABLE_EMAIL_NOTIFICATIONS=true
+EMAIL_SERVICE_URL=http://email-notification:8080
 ```
 
 ## Security Features
 
-- CORS protection
-- Rate limiting
-- Account lockout
-- CSRF protection
-- Secure session management
-- Row Level Security (RLS)
-- Event-driven architecture
+- **CORS Protection**: Configured headers to prevent cross-origin attacks
+- **Rate Limiting**: Protection against brute force and DDoS attacks
+- **Account Lockout**: Temporary account freeze after multiple failed attempts
+- **CSRF Protection**: Token-based protection for state-changing operations
+- **Secure Session Management**: JWT with short expiration and refresh token rotation
+- **Row Level Security (RLS)**: Database-level access controls
+- **Event-driven Architecture**: Decoupled processing for security events
+- **Password Security**:
+  - Bcrypt hashing with appropriate work factor
+  - Complexity requirements
+  - No password storage in plain text
+  - Secure password reset mechanism
+- **Token Management**:
+  - Short-lived access tokens
+  - Rotation on suspicious activity
+  - Database backed for revocation
+  - Secure storage recommendations for clients
 
 ## Development
 
@@ -176,11 +231,104 @@ npm run build
 npm start
 ```
 
+## Deployment
+
+### Docker Deployment
+The service includes a Dockerfile for containerized deployment:
+
+```bash
+# Build the Docker image
+docker build -t nifya-auth-service .
+
+# Run container with environment variables
+docker run -p 3000:3000 --env-file .env nifya-auth-service
+```
+
+### Google Cloud Run Deployment
+For serverless deployment on Google Cloud:
+
+```bash
+# Build the container
+gcloud builds submit --tag gcr.io/PROJECT_ID/nifya-auth-service
+
+# Deploy to Cloud Run
+gcloud run deploy nifya-auth-service \
+  --image gcr.io/PROJECT_ID/nifya-auth-service \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars="JWT_SECRET=SECRET_FROM_SECRET_MANAGER,..."
+```
+
+### Kubernetes Deployment
+For orchestrated deployment:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+      - name: auth-service
+        image: gcr.io/PROJECT_ID/nifya-auth-service:latest
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - secretRef:
+            name: auth-service-secrets
+```
+
 ## API Health Check
 
 #### `GET /health` ✅
 - **Purpose**: Check API and database health
-- **Returns**: Status OK
+- **Returns**: Status OK with detailed service health:
+  ```json
+  {
+    "status": "healthy",
+    "version": "1.0.0",
+    "uptime": "10d 2h 30m",
+    "databaseConnection": "connected",
+    "pubsubConnection": "connected",
+    "memoryUsage": {
+      "rss": "120MB",
+      "heapTotal": "80MB",
+      "heapUsed": "65MB"
+    }
+  }
+  ```
+
+## Monitoring and Metrics
+
+The service exports the following metrics for monitoring:
+
+- **Authentication Metrics**:
+  - Login success/failure rates
+  - Token refresh rates
+  - Token revocation events
+  - User registration rate
+  
+- **Security Metrics**:
+  - Failed login attempts
+  - Account lockouts
+  - Suspicious activity detection
+  - Rate limit triggers
+
+- **Performance Metrics**:
+  - Response times for critical endpoints
+  - Database query performance
+  - Token validation speed
+  - Error rates
 
 ## Event Publishing
 
@@ -206,5 +354,41 @@ The service uses PostgreSQL with the following main tables:
 - `users`: User accounts and profiles
 - `refresh_tokens`: JWT refresh token management
 - `password_reset_requests`: Password recovery
+- `login_attempts`: Tracking failed logins for security
+- `security_events`: Audit log of security-related actions
 
 All tables implement Row Level Security (RLS) for data protection.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Token Validation Failures**
+   - Check clock synchronization between services
+   - Verify JWT_SECRET is consistent across environments
+   - Ensure token hasn't been revoked
+
+2. **Database Connection Issues**
+   - Check connection string and credentials
+   - Verify network connectivity
+   - Check PostgreSQL server is running
+   - Verify connection pool settings
+
+3. **OAuth Integration Problems**
+   - Validate redirect URI configuration
+   - Check Google API credentials
+   - Verify scopes are properly configured
+   - Check CORS settings if using browser redirects
+
+## Contributing
+
+Contributions to the Authentication Service are welcome. Please ensure:
+
+1. All tests pass before submitting PR
+2. New features include appropriate tests
+3. Documentation is updated
+4. Code follows established patterns
+
+## License
+
+This project is proprietary software owned by NIFYA.
