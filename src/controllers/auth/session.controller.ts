@@ -1,18 +1,19 @@
-import { Response } from 'express';
+import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../../config/jwt.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 import { queries } from '../../models/index.js';
 import { AuthRequest, RefreshTokenBody } from './types.js';
+import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
 
-export const logout = async (req: AuthRequest, res: Response) => {
+export const logout = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     console.log('Processing logout request');
     const authHeader = req.headers.authorization;
     
     if (!authHeader?.startsWith('Bearer ')) {
       console.log('Missing or invalid authorization header');
-      return res.status(401).json({ message: 'Missing or invalid token' });
+      return next(errorBuilders.unauthorized(req, 'Missing or invalid token'));
     }
     
     const token = authHeader.split(' ')[1];
@@ -24,14 +25,14 @@ export const logout = async (req: AuthRequest, res: Response) => {
       // Verify token type
       if (decoded.type !== 'access') {
         console.log('Invalid token type for logout');
-        return res.status(401).json({ message: 'Invalid token type' });
+        return next(errorBuilders.unauthorized(req, 'Invalid token type'));
       }
       
       // Get user from database to verify existence
       const user = await queries.getUserById(decoded.sub);
       if (!user) {
         console.log('User not found for logout:', decoded.sub);
-        return res.status(401).json({ message: 'Invalid token' });
+        return next(errorBuilders.unauthorized(req, 'Invalid token'));
       }
 
       // Revoke all refresh tokens for the user
@@ -42,29 +43,22 @@ export const logout = async (req: AuthRequest, res: Response) => {
       res.status(200).json({ message: 'Logged out successfully' });
     } catch (jwtError) {
       console.log('JWT verification failed:', jwtError);
-      return res.status(401).json({ message: 'Invalid or expired token' });
+      return next(errorBuilders.unauthorized(req, 'Invalid or expired token'));
     }
   } catch (error) {
     console.error('Logout error:', error);
-    if (error instanceof Error) {
-      res.status(500).json({ 
-        message: 'Internal server error',
-        error: error.message 
-      });
-    } else {
-      res.status(500).json({ message: 'Internal server error' });
-    }
+    return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
 };
 
-export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>, res: Response) => {
+export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>, res: Response, next: NextFunction) => {
   try {
     console.log('Processing refresh token request');
     const { refreshToken } = req.body;
     
     if (!refreshToken) {
       console.log('Missing refresh token');
-      return res.status(400).json({ message: 'Refresh token is required' });
+      return next(errorBuilders.badRequest(req, 'Refresh token is required'));
     }
     
     try {
@@ -74,7 +68,7 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       
       if (decoded.type !== 'refresh') {
         console.log('Invalid token type for refresh');
-        return res.status(401).json({ message: 'Invalid token type' });
+        return next(errorBuilders.unauthorized(req, 'Invalid token type'));
       }
       
       // Check if the refresh token exists and is valid in the database
@@ -82,14 +76,14 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       
       if (!storedToken) {
         console.log('Refresh token not found or revoked');
-        return res.status(401).json({ message: 'Invalid or expired refresh token' });
+        return next(errorBuilders.unauthorized(req, 'Invalid or expired refresh token'));
       }
       
       // Check if the token has expired
       if (new Date() > new Date(storedToken.expires_at)) {
         console.log('Refresh token has expired');
         await queries.revokeRefreshToken(refreshToken);
-        return res.status(401).json({ message: 'Refresh token has expired' });
+        return next(errorBuilders.unauthorized(req, 'Refresh token has expired'));
       }
       
       // Get the user
@@ -98,7 +92,7 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       if (!user) {
         console.log('User not found for refresh token:', decoded.sub);
         await queries.revokeRefreshToken(refreshToken);
-        return res.status(401).json({ message: 'User not found' });
+        return next(errorBuilders.unauthorized(req, 'User not found'));
       }
       
       // Generate new tokens with required claims
@@ -123,30 +117,23 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       });
     } catch (jwtError) {
       console.log('JWT verification failed:', jwtError);
-      return res.status(401).json({ message: 'Invalid refresh token' });
+      return next(errorBuilders.unauthorized(req, 'Invalid refresh token'));
     }
     
   } catch (error) {
     console.error('Refresh token error:', error);
-    if (error instanceof Error) {
-      res.status(500).json({ 
-        message: 'Internal server error',
-        error: error.message 
-      });
-    } else {
-      res.status(500).json({ message: 'Internal server error' });
-    }
+    return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
 };
 
-export const revokeAllSessions = async (req: AuthRequest, res: Response) => {
+export const revokeAllSessions = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     console.log('Processing revoke all sessions request');
     const authHeader = req.headers.authorization;
     
     if (!authHeader?.startsWith('Bearer ')) {
       console.log('Missing or invalid authorization header');
-      return res.status(401).json({ message: 'Missing or invalid token' });
+      return next(errorBuilders.unauthorized(req, 'Missing or invalid token'));
     }
     
     const token = authHeader.split(' ')[1];
@@ -159,14 +146,14 @@ export const revokeAllSessions = async (req: AuthRequest, res: Response) => {
       // Verify token type
       if (decoded.type !== 'access') {
         console.log('Invalid token type for session revocation');
-        return res.status(401).json({ message: 'Invalid token type' });
+        return next(errorBuilders.unauthorized(req, 'Invalid token type'));
       }
       
       // Verify user exists
       const user = await queries.getUserById(decoded.sub);
       if (!user) {
         console.log('User not found:', decoded.sub);
-        return res.status(404).json({ message: 'User not found' });
+        return next(errorBuilders.notFound(req, 'User'));
       }
       
       // Revoke all refresh tokens for the user
@@ -180,17 +167,10 @@ export const revokeAllSessions = async (req: AuthRequest, res: Response) => {
       });
     } catch (jwtError) {
       console.log('JWT verification failed:', jwtError);
-      return res.status(401).json({ message: 'Invalid or expired token' });
+      return next(errorBuilders.unauthorized(req, 'Invalid or expired token'));
     }
   } catch (error) {
     console.error('Revoke all sessions error:', error);
-    if (error instanceof Error) {
-      res.status(500).json({ 
-        message: 'Internal server error',
-        error: error.message 
-      });
-    } else {
-      res.status(500).json({ message: 'Internal server error' });
-    }
+    return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
 };

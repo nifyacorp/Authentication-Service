@@ -1,16 +1,17 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { signupSchema } from '../../utils/validation.js';
 import { getJwtSecret, RESET_TOKEN_EXPIRES_IN, MAX_PASSWORD_RESET_REQUESTS, PASSWORD_RESET_WINDOW } from '../../config/jwt.js';
 import { AuthRequest, ForgotPasswordBody, ResetPasswordBody, ChangePasswordBody } from './types.js';
+import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
 
-export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, res: Response) => {
+export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, res: Response, next: NextFunction) => {
   try {
     const { email } = req.body;
 
     if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-      return res.status(400).json({ message: 'Invalid email address' });
+      return next(errorBuilders.badRequest(req, 'Invalid email address'));
     }
 
     // TODO: Replace with actual database query
@@ -21,6 +22,7 @@ export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, r
     };
 
     if (!user) {
+      // Even if the user doesn't exist, we return a success message for security
       return res.status(200).json({
         message: 'If your email is registered, you will receive password reset instructions'
       });
@@ -32,10 +34,9 @@ export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, r
     );
 
     if (recentAttempts.length >= MAX_PASSWORD_RESET_REQUESTS) {
-      return res.status(429).json({
-        message: 'Too many reset attempts. Please try again later.',
+      return next(errorBuilders.tooManyRequests(req, 'Too many reset attempts. Please try again later.', {
         retryAfter: new Date(recentAttempts[0] + PASSWORD_RESET_WINDOW).toISOString()
-      });
+      }));
     }
 
     const secret = await getJwtSecret();
@@ -53,7 +54,7 @@ export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, r
       console.log(`Password reset email sent to: ${email}`);
     } catch (emailError) {
       console.error('Failed to send password reset email:', emailError);
-      return res.status(500).json({ message: 'Failed to send reset email' });
+      return next(errorBuilders.serverError(req, 'Failed to send reset email'));
     }
     
     res.status(200).json({
@@ -61,11 +62,11 @@ export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, r
     });
   } catch (error) {
     console.error('Forgot password error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return next(errorBuilders.serverError(req, 'Internal server error'));
   }
 };
 
-export const resetPassword = async (req: Request<{}, {}, ResetPasswordBody>, res: Response) => {
+export const resetPassword = async (req: Request<{}, {}, ResetPasswordBody>, res: Response, next: NextFunction) => {
   try {
     const { token, newPassword } = req.body;
     
@@ -73,18 +74,18 @@ export const resetPassword = async (req: Request<{}, {}, ResetPasswordBody>, res
     
     res.status(200).json({ message: 'Password reset successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
+    return next(errorBuilders.serverError(req, 'Internal server error'));
   }
 };
 
-export const changePassword = async (req: Request<{}, {}, ChangePasswordBody>, res: Response) => {
+export const changePassword = async (req: Request<{}, {}, ChangePasswordBody>, res: Response, next: NextFunction) => {
   try {
     const { currentPassword, newPassword } = req.body;
     const authHeader = req.headers.authorization;
     const secret = await getJwtSecret();
 
     if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Missing or invalid token' });
+      return next(errorBuilders.unauthorized(req, 'Missing or invalid token'));
     }
 
     const token = authHeader.split(' ')[1];
@@ -94,17 +95,16 @@ export const changePassword = async (req: Request<{}, {}, ChangePasswordBody>, r
       const decoded = jwt.verify(token, secret) as { userId: string };
       userId = decoded.userId;
     } catch (jwtError) {
-      return res.status(401).json({ message: 'Invalid or expired token' });
+      return next(errorBuilders.unauthorized(req, 'Invalid or expired token'));
     }
 
     // Validate new password format
     try {
       signupSchema.shape.password.parse(newPassword);
     } catch (error) {
-      return res.status(400).json({
-        message: 'Invalid password format',
+      return next(errorBuilders.badRequest(req, 'Invalid password format', {
         details: 'Password must be at least 8 characters, contain uppercase, number, and special character'
-      });
+      }));
     }
 
     // TODO: Replace with actual database query
@@ -117,7 +117,7 @@ export const changePassword = async (req: Request<{}, {}, ChangePasswordBody>, r
     // Verify current password
     const isValidPassword = await bcrypt.compare(currentPassword, user.password);
     if (!isValidPassword) {
-      return res.status(401).json({ message: 'Current password is incorrect' });
+      return next(errorBuilders.unauthorized(req, 'Current password is incorrect'));
     }
 
     // Hash new password
@@ -162,10 +162,10 @@ export const changePassword = async (req: Request<{}, {}, ChangePasswordBody>, r
       });
     } catch (dbError) {
       console.error('Database error during password change:', dbError);
-      throw new Error('Failed to update password');
+      return next(errorBuilders.serverError(req, 'Failed to update password'));
     }
   } catch (error) {
     console.error('Change password error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return next(errorBuilders.serverError(req, 'Internal server error'));
   }
 };

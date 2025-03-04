@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret, MAX_LOGIN_ATTEMPTS, LOCK_TIME } from '../../config/jwt.js';
@@ -7,8 +7,9 @@ import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 import { z } from 'zod';
 import { AuthRequest, LoginBody, SignupBody, VerifyEmailBody, UserProfile } from './types.js';
 import { queries } from '../../models/index.js';
+import { errorBuilders } from '../../interfaces/http/middleware/errorHandler.js';
 
-export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
+export const login = async (req: Request<{}, {}, LoginBody>, res: Response, next: NextFunction) => {
   try {
     console.log('Processing login request');
     const { email, password } = req.body;
@@ -18,13 +19,8 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
     } catch (error) {
       if (error instanceof z.ZodError) {
         console.log('Login validation failed:', error.errors);
-        return res.status(400).json({
-          message: 'Validation failed',
-          errors: error.errors.map(err => ({
-            field: err.path.join('.'),
-            message: err.message
-          }))
-        });
+        // Use the error builder for validation errors
+        return next(error);
       }
     }
 
@@ -33,22 +29,22 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
     
     if (!user) {
       console.log('Login attempt with non-existent email:', email);
-      return res.status(401).json({ message: 'Invalid credentials' });
+      const { statusCode, body } = errorBuilders.unauthorized(req, 'Invalid credentials');
+      return res.status(statusCode).json(body);
     }
 
     // Check if account is locked
     if (user.locked_until && new Date(user.locked_until) > new Date()) {
       console.log(`Account locked for user ${user.id} until ${user.locked_until}`);
-      return res.status(401).json({
-        message: 'Account is locked. Please try again later.',
-        lockExpires: user.locked_until.toISOString()
-      });
+      const { statusCode, body } = errorBuilders.accountLocked(req, user.locked_until.toISOString());
+      return res.status(statusCode).json(body);
     }
 
     // Verify password
     if (!user.password_hash) {
       console.log(`User ${user.id} has no password (OAuth account)`);
-      return res.status(401).json({ message: 'Invalid login method' });
+      const { statusCode, body } = errorBuilders.invalidLoginMethod(req);
+      return res.status(statusCode).json(body);
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
@@ -66,18 +62,16 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
       await queries.updateLoginAttempts(user.id, loginAttempts, lockUntil);
 
       if (lockUntil) {
-        return res.status(401).json({
-          message: 'Account locked due to too many failed attempts',
-          lockExpires: lockUntil.toISOString()
-        });
+        const { statusCode, body } = errorBuilders.accountLocked(req, lockUntil.toISOString());
+        return res.status(statusCode).json(body);
       }
 
       console.log(`Failed login attempt for email: ${email}`);
 
-      return res.status(400).json({
-        message: 'Invalid credentials',
+      const { statusCode, body } = errorBuilders.badRequest(req, 'Invalid credentials', {
         attemptsRemaining: MAX_LOGIN_ATTEMPTS - loginAttempts
       });
+      return res.status(statusCode).json(body);
     }
 
     // Reset login attempts on successful login
@@ -98,28 +92,22 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {
     console.log(`Successful login for user: ${user.id}`);
     
     res.json({
+      accessToken,
+      refreshToken,
       user: {
         id: user.id,
         email: user.email,
-        name: user.name
-      },
-      accessToken,
-      refreshToken
+        name: user.name,
+        email_verified: user.email_verified
+      }
     });
   } catch (error) {
     console.error('Login error:', error);
-    if (error instanceof Error) {
-      res.status(500).json({ 
-        message: 'Internal server error',
-        error: error.message 
-      });
-    } else {
-      res.status(500).json({ message: 'Internal server error' });
-    }
+    next(error);
   }
 };
 
-export const signup = async (req: Request<{}, {}, SignupBody>, res: Response) => {
+export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, next: NextFunction) => {
   try {
     console.log('Processing signup request');
     const { email, password, name } = req.body;
@@ -129,13 +117,7 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response) =>
     } catch (error) {
       if (error instanceof z.ZodError) {
         console.log('Validation failed:', error.errors);
-        return res.status(400).json({
-          message: 'Validation failed',
-          errors: error.errors.map(err => ({
-            field: err.path.join('.'),
-            message: err.message
-          }))
-        });
+        return next(error);
       }
     }
 
@@ -143,7 +125,8 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response) =>
     const existingUser = await queries.getUserByEmail(email);
     if (existingUser) {
       console.log('Email already exists:', email);
-      return res.status(409).json({ message: 'Email already exists' });
+      const { statusCode, body } = errorBuilders.badRequest(req, 'Email already exists');
+      return res.status(statusCode).json(body);
     }
 
     console.log('Creating new user with email:', email);
@@ -161,50 +144,30 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response) =>
 
     console.log('User created successfully:', user.id);
 
-    // Generate tokens
-    const [accessToken, refreshToken] = await Promise.all([
-      generateAccessToken(user.id, user.email, user.name, user.email_verified),
-      generateRefreshToken(user.id, user.email)
-    ]);
-
-    // Store refresh token
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
-    await queries.createRefreshToken(user.id, refreshToken, expiresAt);
-
-    console.log('Tokens generated and stored for user:', user.id);
-    
+    // Return success response
     res.status(201).json({
+      message: 'User created successfully',
       user: {
         id: user.id,
-        email,
-        name,
-        createdAt: user.created_at
-      },
-      accessToken,
-      refreshToken
+        email: user.email,
+        name: user.name,
+        email_verified: user.email_verified
+      }
     });
   } catch (error) {
     console.error('Signup error:', error);
-    if (error instanceof Error) {
-      res.status(500).json({ 
-        message: 'Internal server error',
-        error: error.message 
-      });
-    } else {
-      res.status(500).json({ message: 'Internal server error' });
-    }
+    next(error);
   }
 };
 
-export const getCurrentUser = async (req: AuthRequest, res: Response) => {
+export const getCurrentUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     console.log('Processing get current user request');
     const authHeader = req.headers.authorization;
     
     if (!authHeader?.startsWith('Bearer ')) {
       console.log('Missing or invalid authorization header');
-      return res.status(401).json({ message: 'Missing or invalid token' });
+      return next(errorBuilders.unauthorized(req, 'Missing or invalid token'));
     }
     
     const token = authHeader.split(' ')[1];
@@ -216,7 +179,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
       // Verify token type
       if (decoded.type !== 'access') {
         console.log('Invalid token type for profile access');
-        return res.status(401).json({ message: 'Invalid token type' });
+        return next(errorBuilders.unauthorized(req, 'Invalid token type'));
       }
       
       // Get user from database
@@ -224,7 +187,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
       
       if (!user) {
         console.log('User not found:', decoded.sub);
-        return res.status(404).json({ message: 'User not found' });
+        return next(errorBuilders.notFound(req, 'User not found'));
       }
       
       console.log(`Profile retrieved for user: ${decoded.sub}`);
@@ -246,33 +209,24 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
       res.json(userProfile);
     } catch (jwtError) {
       console.log('JWT verification failed:', jwtError);
-      return res.status(401).json({ message: 'Invalid or expired token' });
+      return next(errorBuilders.unauthorized(req, 'Invalid or expired token'));
     }
   } catch (error) {
     console.error('Get current user error:', error);
-    if (error instanceof Error) {
-      res.status(500).json({ 
-        message: 'Internal server error',
-        error: error.message 
-      });
-    } else {
-      res.status(500).json({ message: 'Internal server error' });
-    }
+    return next(errorBuilders.serverError(req, 'Internal server error'));
   }
 };
 
-export const verifyEmail = async (req: Request<{}, {}, VerifyEmailBody>, res: Response) => {
+export const verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { token } = req.body;
 
     if (!token) {
-      return res.status(400).json({ message: 'Verification token is required' });
+      return next(errorBuilders.badRequest(req, 'Verification token is required'));
     }
 
     try {
-      const secret = await getJwtSecret();
-      // Verify and decode the token
-      const decoded = jwt.verify(token, secret) as {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret') as {
         userId: string;
         type: string;
         email: string;
@@ -280,7 +234,7 @@ export const verifyEmail = async (req: Request<{}, {}, VerifyEmailBody>, res: Re
 
       // Validate token type
       if (decoded.type !== 'email_verification') {
-        return res.status(400).json({ message: 'Invalid verification token' });
+        return next(errorBuilders.badRequest(req, 'Invalid verification token'));
       }
 
       // TODO: Replace with actual database query
@@ -291,11 +245,11 @@ export const verifyEmail = async (req: Request<{}, {}, VerifyEmailBody>, res: Re
       };
 
       if (!user) {
-        return res.status(400).json({ message: 'Invalid verification token' });
+        return next(errorBuilders.badRequest(req, 'Invalid verification token'));
       }
 
       if (user.emailVerified) {
-        return res.status(400).json({ message: 'Email already verified' });
+        return next(errorBuilders.badRequest(req, 'Email already verified'));
       }
 
       try {
@@ -330,13 +284,13 @@ export const verifyEmail = async (req: Request<{}, {}, VerifyEmailBody>, res: Re
         });
       } catch (dbError) {
         console.error('Database error during email verification:', dbError);
-        throw new Error('Failed to verify email');
+        return next(errorBuilders.serverError(req, 'Failed to verify email'));
       }
     } catch (jwtError) {
-      return res.status(401).json({ message: 'Invalid or expired verification token' });
+      return next(errorBuilders.unauthorized(req, 'Invalid or expired verification token'));
     }
   } catch (error) {
     console.error('Email verification error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return next(errorBuilders.serverError(req, 'Internal server error'));
   }
 };

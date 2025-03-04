@@ -4,6 +4,10 @@ import { authRouter } from './routes/auth.js';
 import { initializePool } from './config/database.js';
 import { initializeOAuthConfig } from './config/oauth.js';
 import { Request, Response, NextFunction } from 'express';
+import { apiDocumenter } from './interfaces/http/middleware/apiDocumenter.js';
+import { errorHandler } from './interfaces/http/middleware/errorHandler.js';
+import { apiExplorerRouter } from './interfaces/http/routes/apiExplorer.routes.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
 const port = parseInt(process.env.PORT || '8080', 10); // Convert to number
@@ -24,6 +28,12 @@ app.use(express.json());
 // Handle preflight requests
 app.options('*', cors(corsOptions));
 
+// Add request ID middleware
+app.use((req: Request, res: Response, next: NextFunction) => {
+  req.headers['x-request-id'] = req.headers['x-request-id'] || uuidv4();
+  next();
+});
+
 // Method validation middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
   const allowedMethods = ['GET', 'POST', 'OPTIONS'];
@@ -36,13 +46,20 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Add API documenter middleware
+app.use(apiDocumenter);
+
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api', apiExplorerRouter);
 
-// Health check endpoint
+// Health check endpoint (legacy - kept for backward compatibility)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+
+// Error handler middleware (must be last)
+app.use(errorHandler);
 
 // Initialize services and start server
 Promise.all([
@@ -51,6 +68,7 @@ Promise.all([
 ]).then(() => {
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on port ${port}`);
+    console.log(`API Explorer available at http://localhost:${port}/api/explorer`);
   });
 }).catch(error => {
   console.error('Failed to initialize services:', error);
