@@ -1,7 +1,4 @@
-/**
- * API Metadata repository that describes all endpoints
- * This serves as the source of truth for API documentation and self-documenting errors
- */
+// API definitions
 export const apiDefinitions = {
     "/api/auth/login": {
         "POST": {
@@ -58,7 +55,7 @@ export const apiDefinitions = {
             "description": "Get the current authenticated user's profile",
             "auth_required": true,
             "required_headers": [
-                { "name": "Authorization", "description": "Bearer token" }
+                "Authorization"
             ],
             "responses": {
                 "200": {
@@ -135,7 +132,7 @@ export const apiDefinitions = {
             "description": "Revoke all active sessions for the current user",
             "auth_required": true,
             "required_headers": [
-                { "name": "Authorization", "description": "Bearer token" }
+                "Authorization"
             ],
             "responses": {
                 "200": {
@@ -184,7 +181,7 @@ export const apiDefinitions = {
             "description": "Change password for authenticated user",
             "auth_required": true,
             "required_headers": [
-                { "name": "Authorization", "description": "Bearer token" }
+                "Authorization"
             ],
             "body_parameters": [
                 { "name": "currentPassword", "type": "string", "description": "Current password", "required": true },
@@ -244,35 +241,66 @@ export const apiDefinitions = {
  * Get metadata for a specific endpoint and method
  */
 export function getEndpointMetadata(path, method) {
-    // Normalize path to handle parameter matching
-    const endpointKey = Object.keys(apiDefinitions).find(key => {
-        // Convert path params pattern (:id) to regex pattern ([^/]+)
-        const pattern = key.replace(/:[^/]+/g, '[^/]+');
-        return path.match(new RegExp(`^${pattern}$`));
-    });
-    if (endpointKey && apiDefinitions[endpointKey][method]) {
+    // Normalize the path and method
+    const normalizedPath = path.replace(/\/$/, '');
+    const normalizedMethod = method.toUpperCase();
+    // Find the matching endpoint key
+    const endpointKey = Object.keys(apiDefinitions).find(key => normalizedPath === key || normalizedPath.match(new RegExp(`^${key.replace(/\//g, '\\/').replace(/\{[^}]+\}/g, '[^/]+')}$`)));
+    if (endpointKey && apiDefinitions[endpointKey][normalizedMethod]) {
         return {
             path: endpointKey,
-            method,
-            ...apiDefinitions[endpointKey][method]
+            method: normalizedMethod,
+            ...apiDefinitions[endpointKey][normalizedMethod]
         };
     }
     return null;
 }
 /**
- * Find related endpoints based on resource path
+ * Find related endpoints based on a path
  */
 export function findRelatedEndpoints(path) {
-    // Extract the resource type from the path
-    const parts = path.split('/');
-    const resource = parts.length > 2 ? parts[2] : ''; // e.g., "auth" from "/api/auth/login"
-    // Find all endpoints related to this resource
-    return Object.keys(apiDefinitions)
-        .filter(key => key.includes(`/${resource}`))
-        .map(key => ({
-        path: key,
-        methods: Object.keys(apiDefinitions[key])
-    }));
+    const segments = path.split('/').filter(Boolean);
+    const relatedEndpoints = [];
+    // First, try to find exact matches
+    for (const key of Object.keys(apiDefinitions)) {
+        if (key === path) {
+            relatedEndpoints.push({
+                path: key,
+                methods: Object.keys(apiDefinitions[key]),
+                description: apiDefinitions[key][Object.keys(apiDefinitions[key])[0]].description.split('.')[0]
+            });
+        }
+    }
+    // Then, find endpoints with similar path segments
+    if (relatedEndpoints.length < 5 && segments.length > 0) {
+        for (const key of Object.keys(apiDefinitions)) {
+            if (relatedEndpoints.some(e => e.path === key))
+                continue;
+            const keySegments = key.split('/').filter(Boolean);
+            const commonSegments = segments.filter(s => keySegments.includes(s));
+            if (commonSegments.length > 0) {
+                relatedEndpoints.push({
+                    path: key,
+                    methods: Object.keys(apiDefinitions[key]),
+                    description: apiDefinitions[key][Object.keys(apiDefinitions[key])[0]].description.split('.')[0]
+                });
+            }
+        }
+    }
+    // If still not enough, add some default endpoints
+    if (relatedEndpoints.length < 3) {
+        const defaultEndpoints = ['/api/auth/login', '/api/auth/signup', '/api/auth/profile'];
+        for (const key of defaultEndpoints) {
+            if (apiDefinitions[key] && !relatedEndpoints.some(e => e.path === key)) {
+                relatedEndpoints.push({
+                    path: key,
+                    methods: Object.keys(apiDefinitions[key]),
+                    description: apiDefinitions[key][Object.keys(apiDefinitions[key])[0]].description.split('.')[0]
+                });
+            }
+        }
+    }
+    return relatedEndpoints.slice(0, 5);
 }
 /**
  * Get all available endpoints

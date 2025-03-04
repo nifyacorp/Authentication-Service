@@ -40,8 +40,8 @@ export function buildErrorResponse(req, options) {
         // Add required parameters if available
         if (endpointMetadata.body_parameters) {
             errorResponse.error.help.required_parameters = endpointMetadata.body_parameters
-                .filter(param => param.required)
-                .map(param => ({
+                .filter((param) => param.required)
+                .map((param) => ({
                 name: param.name,
                 type: param.type,
                 description: param.description
@@ -111,5 +111,11 @@ export const errorBuilders = {
         code: 'INVALID_TOKEN',
         message: `Invalid or expired ${tokenType}.`,
         statusCode: 400
+    }),
+    tooManyRequests: (req, message = 'Too many requests.', details = null) => buildErrorResponse(req, {
+        code: 'TOO_MANY_REQUESTS',
+        message,
+        statusCode: 429,
+        details
     })
 };

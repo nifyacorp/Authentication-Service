@@ -5,7 +5,7 @@ import { signupSchema, loginSchema } from '../../utils/validation.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 import { z } from 'zod';
 import { queries } from '../../models/index.js';
-import { errorBuilders } from '../../interfaces/http/middleware/errorHandler.js';
+import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
 export const login = async (req, res, next) => {
     try {
         console.log('Processing login request');
@@ -177,7 +177,7 @@ export const getCurrentUser = async (req, res, next) => {
     }
     catch (error) {
         console.error('Get current user error:', error);
-        return next(errorBuilders.serverError(req, 'Internal server error'));
+        return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
     }
 };
 export const verifyEmail = async (req, res, next) => {
@@ -235,7 +235,7 @@ export const verifyEmail = async (req, res, next) => {
             }
             catch (dbError) {
                 console.error('Database error during email verification:', dbError);
-                return next(errorBuilders.serverError(req, 'Failed to verify email'));
+                return next(errorBuilders.serverError(req, dbError instanceof Error ? dbError : new Error('Failed to verify email')));
             }
         }
         catch (jwtError) {
@@ -244,6 +244,6 @@ export const verifyEmail = async (req, res, next) => {
     }
     catch (error) {
         console.error('Email verification error:', error);
-        return next(errorBuilders.serverError(req, 'Internal server error'));
+        return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
     }
 };

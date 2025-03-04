@@ -213,7 +213,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response, next: Next
     }
   } catch (error) {
     console.error('Get current user error:', error);
-    return next(errorBuilders.serverError(req, 'Internal server error'));
+    return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
 };
 
@@ -284,13 +284,13 @@ export const verifyEmail = async (req: Request, res: Response, next: NextFunctio
         });
       } catch (dbError) {
         console.error('Database error during email verification:', dbError);
-        return next(errorBuilders.serverError(req, 'Failed to verify email'));
+        return next(errorBuilders.serverError(req, dbError instanceof Error ? dbError : new Error('Failed to verify email')));
       }
     } catch (jwtError) {
       return next(errorBuilders.unauthorized(req, 'Invalid or expired verification token'));
     }
   } catch (error) {
     console.error('Email verification error:', error);
-    return next(errorBuilders.serverError(req, 'Internal server error'));
+    return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
 };

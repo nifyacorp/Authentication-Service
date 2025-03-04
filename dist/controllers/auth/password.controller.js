@@ -39,7 +39,7 @@ export const forgotPassword = async (req, res, next) => {
         }
         catch (emailError) {
             console.error('Failed to send password reset email:', emailError);
-            return next(errorBuilders.serverError(req, 'Failed to send reset email'));
+            return next(errorBuilders.serverError(req, emailError instanceof Error ? emailError : new Error('Failed to send reset email')));
         }
         res.status(200).json({
             message: 'If your email is registered, you will receive password reset instructions'
@@ -47,7 +47,7 @@ export const forgotPassword = async (req, res, next) => {
     }
     catch (error) {
         console.error('Forgot password error:', error);
-        return next(errorBuilders.serverError(req, 'Internal server error'));
+        return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
     }
 };
 export const resetPassword = async (req, res, next) => {
@@ -57,7 +57,7 @@ export const resetPassword = async (req, res, next) => {
         res.status(200).json({ message: 'Password reset successfully' });
     }
     catch (error) {
-        return next(errorBuilders.serverError(req, 'Internal server error'));
+        return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
     }
 };
 export const changePassword = async (req, res, next) => {
@@ -136,11 +136,11 @@ export const changePassword = async (req, res, next) => {
         }
         catch (dbError) {
             console.error('Database error during password change:', dbError);
-            return next(errorBuilders.serverError(req, 'Failed to update password'));
+            return next(errorBuilders.serverError(req, dbError instanceof Error ? dbError : new Error('Failed to update password')));
         }
     }
     catch (error) {
         console.error('Change password error:', error);
-        return next(errorBuilders.serverError(req, 'Internal server error'));
+        return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
     }
 };
