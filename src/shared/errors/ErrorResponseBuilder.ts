@@ -143,5 +143,12 @@ export const errorBuilders = {
     code: 'INVALID_TOKEN',
     message: `Invalid or expired ${tokenType}.`,
     statusCode: 400
+  }),
+  
+  tooManyRequests: (req: Request, message: string = 'Too many requests.', details: any = null) => buildErrorResponse(req, {
+    code: 'TOO_MANY_REQUESTS',
+    message,
+    statusCode: 429,
+    details
   })
 }; 

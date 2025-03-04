@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import { queries } from '../../models/index.js';
 import { getJwtSecret } from '../../config/jwt.js';
@@ -10,6 +10,7 @@ import {
   validateStateToken
 } from '../../config/oauth.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
+import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
 
 let oAuth2Client: OAuth2Client;
 
@@ -25,12 +26,12 @@ function getOAuthClient() {
   return oAuth2Client;
 }
 
-export const getGoogleAuthUrl = async (req: Request, res: Response) => {
+export const getGoogleAuthUrl = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { clientId, clientSecret } = getGoogleCredentials();
     if (!clientId || !clientSecret) {
       console.error('Google OAuth credentials not configured');
-      return res.status(500).json({ message: 'OAuth configuration error' });
+      return next(errorBuilders.serverError(req, new Error('OAuth configuration error')));
     }
 
     // Generate state token and nonce
@@ -53,33 +54,33 @@ export const getGoogleAuthUrl = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Google OAuth URL generation error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
 };
 
-export const handleGoogleCallback = async (req: Request, res: Response) => {
+export const handleGoogleCallback = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { state, code, error, nonce } = req.query;
 
     // Handle OAuth errors
     if (error) {
       console.error('Google OAuth error:', error);
-      return res.status(400).json({ message: 'OAuth authentication failed' });
+      return next(errorBuilders.badRequest(req, 'OAuth authentication failed'));
     }
     
     // Validate state parameter
     if (!state || typeof state !== 'string') {
-      return res.status(400).json({ message: 'Missing state parameter' });
+      return next(errorBuilders.badRequest(req, 'Missing state parameter'));
     }
 
     if (!code) {
-      return res.status(400).json({ message: 'Missing authorization code' });
+      return next(errorBuilders.badRequest(req, 'Missing authorization code'));
     }
 
     // Validate state token and nonce
     if (!validateStateToken(state, nonce as string)) {
       console.error('Invalid or expired state token');
-      return res.status(400).json({ message: 'Invalid state parameter' });
+      return next(errorBuilders.badRequest(req, 'Invalid state parameter'));
     }
 
     // Exchange authorization code for tokens
@@ -97,7 +98,7 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
 
     const payload = ticket.getPayload() as TokenPayload;
     if (!payload.email || !payload.email_verified) {
-      return res.status(400).json({ message: 'Valid email is required' });
+      return next(errorBuilders.badRequest(req, 'Valid email is required'));
     }
 
     try {
@@ -159,13 +160,13 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
       });
     } catch (dbError) {
       console.error('Database error during Google authentication:', dbError);
-      throw new Error('Failed to process authentication');
+      return next(errorBuilders.serverError(req, dbError instanceof Error ? dbError : new Error('Failed to process authentication')));
     }
   } catch (error) {
     console.error('Google OAuth callback error:', error);
     if (error instanceof Error && error.message.includes('Invalid Value')) {
-      return res.status(400).json({ message: 'Invalid OAuth callback parameters' });
+      return next(errorBuilders.badRequest(req, 'Invalid OAuth callback parameters'));
     }
-    res.status(500).json({ message: 'Internal server error' });
+    return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
 };

@@ -7,7 +7,7 @@ import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 import { z } from 'zod';
 import { AuthRequest, LoginBody, SignupBody, VerifyEmailBody, UserProfile } from './types.js';
 import { queries } from '../../models/index.js';
-import { errorBuilders } from '../../interfaces/http/middleware/errorHandler.js';
+import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
 
 export const login = async (req: Request<{}, {}, LoginBody>, res: Response, next: NextFunction) => {
   try {
