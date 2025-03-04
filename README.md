@@ -2,6 +2,17 @@
 
 This service provides a complete authentication system with various endpoints for user management, authentication, and OAuth integration. The service is built with Express.js, TypeScript, PostgreSQL, and Google Cloud services.
 
+## Recent Updates
+
+The Authentication Service has been enhanced with a comprehensive API resilience protocol, focusing on:
+
+- **Standardized Error Handling**: Consistent error responses across all endpoints
+- **Self-Documenting API**: Error responses include context about the request and helpful documentation
+- **Type-Safety**: Improved TypeScript typing for better development experience
+- **Client Experience**: Enhanced error messages make debugging and integration easier
+
+These updates make the Authentication Service more robust, easier to integrate with, and more developer-friendly.
+
 ## Features
 
 - User authentication with JWT tokens
@@ -12,6 +23,7 @@ This service provides a complete authentication system with various endpoints fo
 - Event publishing for user creation
 - Database-backed token storage
 - Row Level Security (RLS) for data protection
+- Self-documenting API with standardized error responses
 
 ## Integration with NIFYA Ecosystem
 
@@ -198,6 +210,140 @@ EMAIL_SERVICE_URL=http://email-notification:8080
   - Rotation on suspicious activity
   - Database backed for revocation
   - Secure storage recommendations for clients
+- **API Resilience**:
+  - Standardized error handling across all endpoints
+  - Self-documenting error responses with helpful context
+  - Consistent error format for better client integration
+  - Error classification by type for intelligent handling
+
+## API Resilience Components
+
+The Authentication Service implements a comprehensive API resilience protocol to enhance error handling and improve the developer experience. This includes:
+
+### Error Response Builder
+
+Located at `src/shared/errors/ErrorResponseBuilder.ts`, this component:
+- Creates standardized error responses across all endpoints
+- Includes contextual information about the request
+- Provides self-documenting error messages
+- Enhances debugging with detailed error context
+
+### API Metadata Repository
+
+Located at `src/shared/utils/apiMetadata.ts`, this serves as:
+- A central source of truth for API documentation
+- A reference for endpoint validation
+- A provider of helpful context in error messages
+- A foundation for API discovery and documentation
+
+### Error Handlers
+
+Controllers have been updated to use standard error builders:
+- Consistent error handling patterns across endpoints
+- Type-safe error construction
+- Helpful context in error responses
+- Improved client experience with predictable error formats
+
+Example error response:
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Authentication required to access this resource.",
+    "request_id": "12345-abcde",
+    "timestamp": "2023-08-15T12:34:56Z",
+    "help": {
+      "endpoint_info": {
+        "description": "Authenticate and get JWT tokens",
+        "auth_required": false,
+        "method": "POST"
+      },
+      "related_endpoints": [
+        {
+          "path": "/api/auth/signup",
+          "methods": ["POST"],
+          "description": "Register a new user account"
+        }
+      ],
+      "documentation_url": "https://docs.nifya.app/api/auth/login",
+      "required_parameters": [
+        {
+          "name": "email",
+          "type": "string",
+          "description": "User email address"
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "description": "User password"
+        }
+      ]
+    }
+  }
+}
+```
+
+### Common Error Types
+
+The service includes builders for common error types:
+- `badRequest` - 400 status code for invalid inputs
+- `unauthorized` - 401 status code for authentication failures
+- `forbidden` - 403 status code for permission issues
+- `notFound` - 404 status code for missing resources
+- `tooManyRequests` - 429 status code for rate limiting
+- `serverError` - 500 status code for internal errors
+- `validationError` - 400 status code for input validation failures
+- `accountLocked` - 401 status code with lock expiry details
+- `invalidToken` - 400 status code for token issues
+- `invalidLoginMethod` - 401 status code for method mismatches
+
+### Controller Updates
+
+The following controller files have been updated to use error builders:
+
+#### User Controller (`src/controllers/auth/user.controller.ts`)
+- `login`: Enhanced with better error handling for invalid credentials, account lockouts, and validation errors
+- `signup`: Now uses standardized validation errors and improved response for email conflicts
+- `getCurrentUser`: Includes helpful error messages for authentication and user lookup issues
+- `verifyEmail`: Provides better error context for token verification and email status
+
+#### Password Controller (`src/controllers/auth/password.controller.ts`)
+- `forgotPassword`: Enhanced with rate limiting error responses and validation messages
+- `resetPassword`: Improved error handling for token verification and password validation
+- `changePassword`: Better error context for authentication, validation, and password update issues
+
+#### Session Controller (`src/controllers/auth/session.controller.ts`)
+- `logout`: Now provides clear authentication errors and session termination status
+- `refreshToken`: Better error messages for invalid or expired tokens
+- `revokeAllSessions`: Improved error handling for permission and user validation
+
+#### OAuth Controller (`src/controllers/auth/oauth.controller.ts`)
+- `getGoogleAuthUrl`: Enhanced error handling for OAuth configuration
+- `handleGoogleCallback`: Better error messages for OAuth callback validation and token exchange
+
+These updates ensure consistent error handling across all authentication endpoints while improving the developer experience with self-documenting errors.
+
+### Technical Implementation
+
+The API resilience implementation uses several TypeScript patterns:
+
+- **Interface-First Design**: All API metadata and error responses follow well-defined interfaces
+- **Error Builder Pattern**: Factory functions create standardized error responses
+- **Middleware Integration**: Error handling is integrated into Express middleware pipeline
+- **Type Guards**: Runtime checking ensures error objects maintain their shape
+- **Contextual Responses**: Errors include the full context of what went wrong and how to fix it
+
+Key files:
+- `ErrorResponseBuilder.ts`: Core error response generation
+- `apiMetadata.ts`: API documentation and metadata
+- `apiDocumenter.ts`: Middleware for request validation
+- `errorHandler.ts`: Global error handling middleware
+
+Stack:
+- TypeScript 4.9+
+- Express.js middleware
+- Zod for validation
+- JWT for authentication
 
 ## Development
 
