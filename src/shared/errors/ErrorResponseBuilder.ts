@@ -63,8 +63,8 @@ export function buildErrorResponse(req: Request, options: ErrorResponseOptions) 
     // Add required parameters if available
     if (endpointMetadata.body_parameters) {
       errorResponse.error.help.required_parameters = endpointMetadata.body_parameters
-        .filter(param => param.required)
-        .map(param => ({
+        .filter((param: any) => param.required)
+        .map((param: any) => ({
           name: param.name,
           type: param.type,
           description: param.description
