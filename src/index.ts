@@ -14,7 +14,22 @@ const port = parseInt(process.env.PORT || '8080', 10); // Convert to number
 
 // CORS configuration
 const corsOptions = {
-  origin: ['https://clever-kelpie-60c3a6.netlify.app', 'http://localhost:5173', 'http://localhost:3000'],
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow requests from any Netlify subdomains and localhost for development
+    if (
+      origin.endsWith('.netlify.app') || 
+      origin.includes('localhost') || 
+      origin.includes('127.0.0.1')
+    ) {
+      return callback(null, true);
+    }
+    
+    // Block other origins
+    callback(new Error('Not allowed by CORS'), false);
+  },
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
