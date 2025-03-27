@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { authRouter } from './routes/auth.js';
 import { initializePool } from './config/database.js';
 import { initializeOAuthConfig } from './config/oauth.js';
@@ -8,6 +9,7 @@ import { apiDocumenter } from './interfaces/http/middleware/apiDocumenter.js';
 import { errorHandler } from './interfaces/http/middleware/errorHandler.js';
 import { apiExplorerRouter } from './interfaces/http/routes/apiExplorer.routes.js';
 import { v4 as uuidv4 } from 'uuid';
+import { errorBuilders } from './shared/errors/ErrorResponseBuilder.js';
 
 const app = express();
 const port = parseInt(process.env.PORT || '8080', 10); // Convert to number
@@ -60,6 +62,53 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   }
   next();
 });
+
+// Rate limiting middleware
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 login attempts per IP in the window
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // Don't count successful logins against the limit
+  handler: (req: Request, res: Response, next: NextFunction) => {
+    const { statusCode, body } = errorBuilders.tooManyRequests(
+      req, 
+      'Too many login attempts. Please try again later.',
+      { 
+        retryAfter: Math.ceil(15 * 60), // in seconds
+        windowSize: '15 minutes'
+      }
+    );
+    return res.status(statusCode).json(body);
+  }
+});
+
+// Apply stricter rate limit to authentication endpoints
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/signup', loginLimiter);
+app.use('/api/auth/forgot-password', loginLimiter);
+
+// General API rate limiter
+const apiLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 100, // 100 requests per IP in the window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response, next: NextFunction) => {
+    const { statusCode, body } = errorBuilders.tooManyRequests(
+      req, 
+      'Too many requests. Please slow down.',
+      { 
+        retryAfter: Math.ceil(5 * 60), // in seconds
+        windowSize: '5 minutes'
+      }
+    );
+    return res.status(statusCode).json(body);
+  }
+});
+
+// Apply general rate limit to all API routes
+app.use('/api', apiLimiter);
 
 // Add API documenter middleware
 app.use(apiDocumenter);

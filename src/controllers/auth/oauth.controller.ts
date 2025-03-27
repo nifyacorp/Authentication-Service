@@ -65,40 +65,74 @@ export const handleGoogleCallback = async (req: Request, res: Response, next: Ne
     // Handle OAuth errors
     if (error) {
       console.error('Google OAuth error:', error);
-      return next(errorBuilders.badRequest(req, 'OAuth authentication failed'));
+      return next(errorBuilders.badRequest(req, `OAuth authentication failed: ${error}`));
     }
     
-    // Validate state parameter
-    if (!state || typeof state !== 'string') {
-      return next(errorBuilders.badRequest(req, 'Missing state parameter'));
+    // Validate required parameters
+    const missingParams = {
+      code: !code ? "Missing required query parameter: code" : null,
+      state: !state ? "Missing required query parameter: state" : null
+    };
+    
+    // Filter out null values
+    const missingDetails = Object.fromEntries(
+      Object.entries(missingParams).filter(([_, v]) => v !== null)
+    );
+    
+    // If any required parameters are missing, return validation error
+    if (Object.keys(missingDetails).length > 0) {
+      return next(errorBuilders.validationError(req, missingDetails));
     }
 
-    if (!code) {
-      return next(errorBuilders.badRequest(req, 'Missing authorization code'));
+    // Validate state token type
+    if (typeof state !== 'string') {
+      return next(errorBuilders.badRequest(req, 'Invalid state parameter type'));
+    }
+    
+    // Type check code parameter
+    if (typeof code !== 'string') {
+      return next(errorBuilders.badRequest(req, 'Invalid code parameter type'));
     }
 
-    // Validate state token and nonce
+    // Validate state token and nonce (if provided)
     if (!validateStateToken(state, nonce as string)) {
       console.error('Invalid or expired state token');
-      return next(errorBuilders.badRequest(req, 'Invalid state parameter'));
+      return next(errorBuilders.badRequest(req, 'Invalid state parameter (expired or tampered)'));
     }
 
     // Exchange authorization code for tokens
     const client = getOAuthClient();
-    const { tokens } = await client.getToken(code as string);
-    client.setCredentials(tokens);
-
-    const secret = await getJwtSecret();
-    // Verify ID token and get user info
-    const { clientId } = getGoogleCredentials();
-    const ticket = await client.verifyIdToken({
-      idToken: tokens.id_token!,
-      audience: clientId
-    });
-
-    const payload = ticket.getPayload() as TokenPayload;
-    if (!payload.email || !payload.email_verified) {
-      return next(errorBuilders.badRequest(req, 'Valid email is required'));
+    
+    try {
+      const { tokens } = await client.getToken(code);
+      client.setCredentials(tokens);
+      
+      if (!tokens.id_token) {
+        return next(errorBuilders.serverError(req, new Error('No ID token returned from Google')));
+      }
+      
+      // Verify ID token and get user info
+      const { clientId } = getGoogleCredentials();
+      const ticket = await client.verifyIdToken({
+        idToken: tokens.id_token,
+        audience: clientId
+      });
+      
+      const payload = ticket.getPayload() as TokenPayload;
+      if (!payload) {
+        return next(errorBuilders.serverError(req, new Error('Failed to parse ID token payload')));
+      }
+      
+      if (!payload.email) {
+        return next(errorBuilders.badRequest(req, 'Email missing from OAuth response'));
+      }
+      
+      if (!payload.email_verified) {
+        return next(errorBuilders.badRequest(req, 'Email not verified with Google'));
+      }
+    } catch (tokenError) {
+      console.error('Token exchange error:', tokenError);
+      return next(errorBuilders.badRequest(req, 'Failed to exchange code for tokens'));
     }
 
     try {

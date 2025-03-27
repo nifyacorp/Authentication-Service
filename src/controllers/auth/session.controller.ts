@@ -6,44 +6,63 @@ import { queries } from '../../models/index.js';
 import { AuthRequest, RefreshTokenBody } from './types.js';
 import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
 
-export const logout = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const logout = async (req: AuthRequest<any, any, RefreshTokenBody>, res: Response, next: NextFunction) => {
   try {
     console.log('Processing logout request');
-    const authHeader = req.headers.authorization;
     
-    if (!authHeader?.startsWith('Bearer ')) {
-      console.log('Missing or invalid authorization header');
-      return next(errorBuilders.unauthorized(req, 'Missing or invalid token'));
+    // Get refresh token from request body
+    const { refreshToken } = req.body;
+    
+    if (!refreshToken) {
+      console.log('Missing refresh token');
+      return next(errorBuilders.badRequest(req, 'Refresh token is required'));
     }
-    
-    const token = authHeader.split(' ')[1];
     
     try {
       const secret = await getJwtSecret();
-      const decoded = jwt.verify(token, secret) as { sub: string, type: string };
-
-      // Verify token type
-      if (decoded.type !== 'access') {
-        console.log('Invalid token type for logout');
-        return next(errorBuilders.unauthorized(req, 'Invalid token type'));
+      
+      // Verify the refresh token
+      try {
+        const decoded = jwt.verify(refreshToken, secret) as { sub: string, type: string };
+        
+        // Verify token type
+        if (decoded.type !== 'refresh') {
+          console.log('Invalid token type for logout');
+          return next(errorBuilders.badRequest(req, 'Invalid token type'));
+        }
+        
+        // Check if the refresh token exists in the database
+        const storedToken = await queries.getRefreshToken(refreshToken);
+        
+        if (!storedToken) {
+          console.log('Refresh token not found or already revoked');
+          // If token is already revoked, still return success for idempotence
+          return res.status(200).json({ 
+            message: 'Logged out successfully',
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        // Revoke the specific refresh token
+        await queries.revokeRefreshToken(refreshToken);
+        
+        console.log(`User ${decoded.sub} logged out successfully`);
+        
+        res.status(200).json({ 
+          message: 'Logged out successfully',
+          timestamp: new Date().toISOString()
+        });
+      } catch (jwtError) {
+        console.log('JWT verification failed:', jwtError);
+        // Even if token is invalid, return success for security reasons
+        return res.status(200).json({ 
+          message: 'Logged out successfully',
+          timestamp: new Date().toISOString()
+        });
       }
-      
-      // Get user from database to verify existence
-      const user = await queries.getUserById(decoded.sub);
-      if (!user) {
-        console.log('User not found for logout:', decoded.sub);
-        return next(errorBuilders.unauthorized(req, 'Invalid token'));
-      }
-
-      // Revoke all refresh tokens for the user
-      await queries.revokeAllUserRefreshTokens(decoded.sub);
-      
-      console.log(`User ${decoded.sub} logged out successfully`);
-      
-      res.status(200).json({ message: 'Logged out successfully' });
-    } catch (jwtError) {
-      console.log('JWT verification failed:', jwtError);
-      return next(errorBuilders.unauthorized(req, 'Invalid or expired token'));
+    } catch (error) {
+      console.error('Logout error:', error);
+      return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
     }
   } catch (error) {
     console.error('Logout error:', error);
@@ -61,14 +80,21 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       return next(errorBuilders.badRequest(req, 'Refresh token is required'));
     }
     
+    // Basic token format validation
+    if (typeof refreshToken !== 'string' || !refreshToken.match(/^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_.+/=]*$/)) {
+      console.log('Invalid refresh token format');
+      return next(errorBuilders.badRequest(req, 'Invalid refresh token format'));
+    }
+    
     try {
       const secret = await getJwtSecret();
+      
       // Verify the refresh token's JWT format and type
       const decoded = jwt.verify(refreshToken, secret) as { sub: string, type: string, email: string };
       
       if (decoded.type !== 'refresh') {
         console.log('Invalid token type for refresh');
-        return next(errorBuilders.unauthorized(req, 'Invalid token type'));
+        return next(errorBuilders.badRequest(req, 'Invalid token type, expected refresh token'));
       }
       
       // Check if the refresh token exists and is valid in the database
@@ -113,7 +139,14 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       
       res.json({
         accessToken: newAccessToken,
-        refreshToken: newRefreshToken
+        refreshToken: newRefreshToken,
+        expiresIn: 900, // 15 minutes in seconds, to help clients know when to refresh
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          email_verified: user.email_verified
+        }
       });
     } catch (jwtError) {
       console.log('JWT verification failed:', jwtError);
