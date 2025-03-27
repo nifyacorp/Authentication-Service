@@ -4,14 +4,32 @@ This service provides a complete authentication system with various endpoints fo
 
 ## Recent Updates
 
-The Authentication Service has been enhanced with a comprehensive API resilience protocol, focusing on:
+The Authentication Service has received significant enhancements for improved reliability, security, and interoperability:
 
+### Rate Limiting Protection (New)
+- **Enhanced Security**: Advanced rate limiting to protect against brute force attacks
+- **Tiered Approach**: Stricter limits (10 reqs/15min) on sensitive endpoints like login and signup
+- **General Protection**: Standard rate limits (100 reqs/5min) on all API routes
+- **Smart Response Handling**: Rate limit responses include helpful retry information
+
+### OAuth2 Improvements (New)
+- **Robust Error Handling**: Better error detection and validation for Google OAuth flows
+- **Parameter Validation**: Strict validation of all OAuth callback parameters
+- **Security Enhancement**: Improved state token validation for CSRF protection
+- **Fallback Mechanisms**: Graceful handling of edge cases in OAuth responses
+
+### API Resilience Protocol
 - **Standardized Error Handling**: Consistent error responses across all endpoints
 - **Self-Documenting API**: Error responses include context about the request and helpful documentation
 - **Type-Safety**: Improved TypeScript typing for better development experience
 - **Client Experience**: Enhanced error messages make debugging and integration easier
 
-These updates make the Authentication Service more robust, easier to integrate with, and more developer-friendly.
+### Session Management Enhancements (New)
+- **Improved Logout Flow**: Enhanced token validation during logout
+- **Better Token Refresh**: More robust refresh token validation and error handling
+- **User-Friendly Responses**: Improved responses with additional useful metadata
+
+These updates make the Authentication Service more robust, secure, and developer-friendly.
 
 ## Features
 
@@ -105,12 +123,24 @@ The Authentication Service is a critical component of the NIFYA platform, provid
 
 #### `POST /api/auth/logout` ✅
 - **Purpose**: Invalidate current session
-- **Headers**: `Authorization: Bearer <token>`
-- **Returns**: 200 OK
+- **Body**: 
+  ```json
+  {
+    "refreshToken": "string"
+  }
+  ```
+- **Returns**: 200 OK with timestamp
+  ```json
+  {
+    "message": "Logged out successfully",
+    "timestamp": "2025-03-26T11:59:37.059Z"
+  }
+  ```
 - **Features**:
   - Token validation
-  - Revokes all refresh tokens
+  - Specific refresh token revocation
   - Secure session termination
+  - Idempotent operation (safe to retry)
 
 ### Session Management
 
@@ -122,11 +152,27 @@ The Authentication Service is a critical component of the NIFYA platform, provid
     "refreshToken": "string"
   }
   ```
-- **Returns**: New access and refresh tokens
+- **Returns**: New access and refresh tokens with user data
+  ```json
+  {
+    "accessToken": "string",
+    "refreshToken": "string",
+    "expiresIn": 900,
+    "user": {
+      "id": "string",
+      "email": "string",
+      "name": "string",
+      "email_verified": boolean
+    }
+  }
+  ```
 - **Features**:
-  - Token validation and expiration check
+  - Enhanced token validation with format checks
+  - Expiration verification
   - Old token revocation
   - Database-backed token storage
+  - Includes token expiration information
+  - Returns user data for client-side context refresh
 
 #### `POST /api/auth/revoke-all-sessions` ✅
 - **Purpose**: Logout from all devices
@@ -154,21 +200,46 @@ The Authentication Service is a critical component of the NIFYA platform, provid
   {
     code: string;    // Authorization code
     state: string;   // CSRF token
+    nonce?: string;  // Optional nonce for additional security
   }
   ```
-- **Returns**: Access token and user data
+- **Returns**: Access token, refresh token, and user data
+  ```json
+  {
+    "user": {
+      "id": "string",
+      "email": "string",
+      "name": "string",
+      "picture": "string",
+      "firstLogin": boolean
+    },
+    "accessToken": "string",
+    "refreshToken": "string"
+  }
+  ```
 - **Features**:
-  - CSRF validation
-  - Token generation
-  - Profile data sync
+  - Enhanced parameter validation
+  - Comprehensive error messages
+  - CSRF protection with state token validation
+  - Support for nonce verification
+  - Automatic user creation or profile update
+  - Profile data synchronization with Google account
+  - Error handling for OAuth flow failures
+  - Type validation for all parameters
 
 ## Environment Variables
 
 ```bash
 PORT=3000                    # Server port
 JWT_SECRET=your-secret-key   # JWT signing key
-JWT_EXPIRES_IN=1h            # JWT token expiration time
+JWT_EXPIRES_IN=15m           # JWT token expiration time (15 minutes)
 REFRESH_TOKEN_EXPIRES_IN=7d  # Refresh token expiration
+
+# Rate Limiting Configuration
+RATE_LIMIT_GENERAL_MAX=100   # Maximum requests for general endpoints
+RATE_LIMIT_GENERAL_WINDOW=5  # Window in minutes for general endpoints
+RATE_LIMIT_AUTH_MAX=10       # Maximum requests for auth endpoints
+RATE_LIMIT_AUTH_WINDOW=15    # Window in minutes for auth endpoints
 
 # Database Configuration
 DB_HOST=your-db-host
@@ -181,6 +252,7 @@ DB_PASSWORD=your-db-password
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=your-redirect-uri
+GOOGLE_OAUTH_STATE_TTL=600   # State token time-to-live in seconds
 
 # PubSub Configuration
 PUBSUB_TOPIC_USER_EVENTS=user-events
@@ -189,15 +261,28 @@ GOOGLE_CLOUD_PROJECT=your-project-id
 # Email Notifications
 ENABLE_EMAIL_NOTIFICATIONS=true
 EMAIL_SERVICE_URL=http://email-notification:8080
+
+# Security Configuration
+CORS_ALLOWED_ORIGINS=netlify.app,localhost  # Comma-separated allowed origins
+ACCOUNT_LOCKOUT_ATTEMPTS=5                  # Failed attempts before lockout
+ACCOUNT_LOCKOUT_DURATION=15                 # Lockout duration in minutes
 ```
 
 ## Security Features
 
 - **CORS Protection**: Configured headers to prevent cross-origin attacks
-- **Rate Limiting**: Protection against brute force and DDoS attacks
+- **Advanced Rate Limiting**: 
+  - Tiered protection against brute force and DDoS attacks
+  - Strict limits on sensitive endpoints (10 reqs/15min for login/signup)
+  - General API protection (100 reqs/5min) for all routes
+  - Informative responses with retry-after headers
+  - IP-based tracking with secure expiration
 - **Account Lockout**: Temporary account freeze after multiple failed attempts
 - **CSRF Protection**: Token-based protection for state-changing operations
-- **Secure Session Management**: JWT with short expiration and refresh token rotation
+- **Secure Session Management**: 
+  - JWT with short expiration and refresh token rotation
+  - Enhanced logout flow with token validation
+  - Improved refresh token validation
 - **Row Level Security (RLS)**: Database-level access controls
 - **Event-driven Architecture**: Decoupled processing for security events
 - **Password Security**:
@@ -215,6 +300,11 @@ EMAIL_SERVICE_URL=http://email-notification:8080
   - Self-documenting error responses with helpful context
   - Consistent error format for better client integration
   - Error classification by type for intelligent handling
+- **OAuth2 Security**:
+  - Strict parameter validation
+  - Enhanced state token protection
+  - Detailed error handling
+  - Secure token exchange
 
 ## API Resilience Components
 

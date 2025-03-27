@@ -118,83 +118,83 @@ export const handleGoogleCallback = async (req: Request, res: Response, next: Ne
         audience: clientId
       });
       
-      const payload = ticket.getPayload() as TokenPayload;
-      if (!payload) {
+      const userPayload = ticket.getPayload() as TokenPayload;
+      if (!userPayload) {
         return next(errorBuilders.serverError(req, new Error('Failed to parse ID token payload')));
       }
       
-      if (!payload.email) {
+      if (!userPayload.email) {
         return next(errorBuilders.badRequest(req, 'Email missing from OAuth response'));
       }
       
-      if (!payload.email_verified) {
+      if (!userPayload.email_verified) {
         return next(errorBuilders.badRequest(req, 'Email not verified with Google'));
+      }
+      
+      try {
+        // Check if user exists
+        let user = await queries.getUserByEmail(userPayload.email);
+        let isNewUser = false;
+
+        if (!user) {
+          isNewUser = true;
+          // Create new user with Google profile data
+          user = await queries.createUser(
+            userPayload.email,
+            null, // No password for Google users
+            userPayload.name || userPayload.email.split('@')[0],
+            userPayload.sub, // Google ID
+            userPayload.picture || undefined
+          );
+
+          console.log('New user registered via Google:', user.id);
+        } else {
+          // Update existing user's Google profile info if needed
+          if (
+            user.google_id !== userPayload.sub ||
+            user.name !== userPayload.name ||
+            user.picture_url !== userPayload.picture
+          ) {
+            // Update user profile using queries
+            await queries.updateUserProfile(user.id, {
+              googleId: userPayload.sub,
+              name: userPayload.name || undefined,
+              pictureUrl: userPayload.picture || undefined
+            });
+          }
+          console.log('Existing user logged in via Google:', user.id);
+        }
+
+        // Generate application tokens with required claims
+        const [accessToken, refreshToken] = await Promise.all([
+          generateAccessToken(user.id, user.email, user.name, user.email_verified),
+          generateRefreshToken(user.id, user.email)
+        ]);
+
+        // Store refresh token
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+        await queries.createRefreshToken(user.id, refreshToken, expiresAt);
+
+        // Return user data and tokens
+        res.json({
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            picture: user.picture_url,
+            firstLogin: isNewUser
+          },
+          accessToken,
+          refreshToken
+        });
+      } catch (dbError) {
+        console.error('Database error during Google authentication:', dbError);
+        return next(errorBuilders.serverError(req, dbError instanceof Error ? dbError : new Error('Failed to process authentication')));
       }
     } catch (tokenError) {
       console.error('Token exchange error:', tokenError);
       return next(errorBuilders.badRequest(req, 'Failed to exchange code for tokens'));
-    }
-
-    try {
-      // Check if user exists
-      let user = await queries.getUserByEmail(payload.email);
-      let isNewUser = false;
-
-      if (!user) {
-        isNewUser = true;
-        // Create new user with Google profile data
-        user = await queries.createUser(
-          payload.email,
-          null, // No password for Google users
-          payload.name || payload.email.split('@')[0],
-          payload.sub, // Google ID
-          payload.picture || undefined
-        );
-
-        console.log('New user registered via Google:', user.id);
-      } else {
-        // Update existing user's Google profile info if needed
-        if (
-          user.google_id !== payload.sub ||
-          user.name !== payload.name ||
-          user.picture_url !== payload.picture
-        ) {
-          // Update user profile using queries
-          await queries.updateUserProfile(user.id, {
-            googleId: payload.sub,
-            name: payload.name || undefined,
-            pictureUrl: payload.picture || undefined
-          });
-        }
-        console.log('Existing user logged in via Google:', user.id);
-      }
-
-      // Generate application tokens with required claims
-      const [accessToken, refreshToken] = await Promise.all([
-        generateAccessToken(user.id, user.email, user.name, user.email_verified),
-        generateRefreshToken(user.id, user.email)
-      ]);
-
-      // Store refresh token
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
-      await queries.createRefreshToken(user.id, refreshToken, expiresAt);
-
-      // Return user data and tokens
-      res.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          picture: user.picture_url,
-          firstLogin: isNewUser
-        },
-        accessToken,
-        refreshToken
-      });
-    } catch (dbError) {
-      console.error('Database error during Google authentication:', dbError);
-      return next(errorBuilders.serverError(req, dbError instanceof Error ? dbError : new Error('Failed to process authentication')));
     }
   } catch (error) {
     console.error('Google OAuth callback error:', error);
