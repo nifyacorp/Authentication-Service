@@ -20,20 +20,39 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Allow requests from any Netlify subdomains and localhost for development
-    if (
-      origin.endsWith('.netlify.app') || 
-      origin.includes('localhost') || 
-      origin.includes('127.0.0.1')
-    ) {
+    // Check if the origin is allowed
+    const allowedDomains = [
+      // Netlify domains
+      '.netlify.app',
+      // Local development
+      'localhost',
+      '127.0.0.1',
+      // Cloud Run domains
+      '.run.app',
+      // Specifically allow the main page domain
+      'main-page-415554190254.us-central1.run.app'
+    ];
+    
+    // Check if origin matches any allowed domain
+    const isAllowed = allowedDomains.some(domain => {
+      return domain.startsWith('.') 
+        ? origin.endsWith(domain)
+        : origin.includes(domain);
+    });
+    
+    if (isAllowed) {
       return callback(null, true);
     }
+    
+    // Log blocked origin for debugging
+    console.log(`CORS blocked origin: ${origin}`);
     
     // Block other origins
     callback(new Error('Not allowed by CORS'), false);
   },
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id', 'X-Request-Id'],
+  exposedHeaders: ['X-Request-Id'],
   credentials: true,
   maxAge: 86400 // 24 hours
 };
