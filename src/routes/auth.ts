@@ -11,7 +11,8 @@ import {
   resetPassword,
   changePassword,
   getGoogleAuthUrl,
-  handleGoogleCallback
+  handleGoogleCallback,
+  getSession
 } from '../controllers/auth/index.js';
 import { generateAccessToken, generateRefreshToken } from '../utils/jwt.js';
 
@@ -67,6 +68,7 @@ authRouter.post('/verify-email', verifyEmail);
 authRouter.post('/logout', logout);
 authRouter.post('/refresh', refreshToken);
 authRouter.post('/revoke-all-sessions', revokeAllSessions);
+authRouter.get('/session', getSession);  // Add session endpoint for frontend
 
 // Password management
 authRouter.post('/forgot-password', forgotPassword);

@@ -207,3 +207,98 @@ export const revokeAllSessions = async (req: AuthRequest, res: Response, next: N
     return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
 };
+
+/**
+ * Get current session information
+ * This endpoint is used by the frontend to validate the user's session
+ */
+export const getSession = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    console.log('Processing get session request');
+    const authHeader = req.headers.authorization;
+    
+    // If no token provided, return empty session (not authenticated)
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.log('No authorization header, returning empty session');
+      return res.json({ 
+        authenticated: false,
+        user: null,
+        session: null 
+      });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    
+    try {
+      const secret = await getJwtSecret();
+      // Verify and decode the access token
+      const decoded = jwt.verify(token, secret) as { 
+        sub: string, 
+        type: string, 
+        email: string, 
+        name?: string,
+        email_verified?: boolean,
+        iat: number,
+        exp: number
+      };
+      
+      // Verify token type
+      if (decoded.type !== 'access') {
+        console.log('Invalid token type for session check');
+        return res.json({ 
+          authenticated: false,
+          user: null,
+          session: null,
+          error: 'Invalid token type'
+        });
+      }
+      
+      // Get user data
+      const user = await queries.getUserById(decoded.sub);
+      
+      if (!user) {
+        console.log('User not found for token:', decoded.sub);
+        return res.json({ 
+          authenticated: false,
+          user: null,
+          session: null,
+          error: 'User not found'
+        });
+      }
+      
+      console.log(`Session validated for user: ${decoded.sub}`);
+      
+      // Return session information
+      res.json({
+        authenticated: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          email_verified: user.email_verified
+        },
+        session: {
+          issuedAt: new Date(decoded.iat * 1000).toISOString(),
+          expiresAt: new Date(decoded.exp * 1000).toISOString(),
+          remainingTime: Math.max(0, decoded.exp - Math.floor(Date.now() / 1000))
+        }
+      });
+    } catch (jwtError) {
+      console.log('JWT verification failed:', jwtError);
+      return res.json({ 
+        authenticated: false,
+        user: null,
+        session: null,
+        error: 'Invalid or expired token'
+      });
+    }
+  } catch (error) {
+    console.error('Get session error:', error);
+    return res.json({ 
+      authenticated: false,
+      user: null,
+      session: null,
+      error: 'Server error'
+    });
+  }
+};
