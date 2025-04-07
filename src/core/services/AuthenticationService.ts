@@ -46,4 +46,9 @@ export interface AuthenticationService {
     refreshToken: string;
     isNewUser: boolean;
   }>;
+  
+  /**
+   * Get Google OAuth authorization URL
+   */
+  getGoogleAuthUrl(state: string): string;
 }

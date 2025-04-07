@@ -146,6 +146,13 @@ export class AuthenticationServiceImpl implements AuthenticationService {
   }
 
   /**
+   * Get Google OAuth authorization URL
+   */
+  public getGoogleAuthUrl(state: string): string {
+    return this.googleOAuthService.generateAuthUrl(state);
+  }
+
+  /**
    * Handle Google OAuth authentication
    */
   public async handleGoogleAuth(code: string): Promise<{
