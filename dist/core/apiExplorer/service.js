@@ -1,10 +1,8 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const apiMetadata_js_1 = require("../../shared/utils/apiMetadata.js");
+import { getAllEndpoints, getEndpointMetadata, findRelatedEndpoints } from '../../shared/utils/apiMetadata.js';
 /**
  * API Explorer service provides endpoints for API discovery and documentation
  */
-exports.default = {
+export default {
     /**
      * Get API health status and overview of available endpoints
      */
@@ -19,7 +17,7 @@ exports.default = {
             api: {
                 base_url: process.env.API_BASE_URL || 'https://api.nifya.app',
                 documentation_url: 'https://docs.nifya.app/api/auth',
-                endpoints_count: (0, apiMetadata_js_1.getAllEndpoints)().length,
+                endpoints_count: getAllEndpoints().length,
                 endpoint_groups: [
                     { name: 'Authentication', base_path: '/api/auth' },
                     { name: 'User Management', base_path: '/api/auth/me' },
@@ -35,8 +33,8 @@ exports.default = {
      */
     getAllEndpoints() {
         return {
-            endpoints: (0, apiMetadata_js_1.getAllEndpoints)(),
-            count: (0, apiMetadata_js_1.getAllEndpoints)().length,
+            endpoints: getAllEndpoints(),
+            count: getAllEndpoints().length,
             documentation_url: 'https://docs.nifya.app/api/auth'
         };
     },
@@ -44,18 +42,18 @@ exports.default = {
      * Get detailed documentation for a specific endpoint
      */
     getEndpointDocumentation(path, method) {
-        const metadata = (0, apiMetadata_js_1.getEndpointMetadata)(path, method);
+        const metadata = getEndpointMetadata(path, method);
         if (!metadata) {
             return {
                 error: {
                     message: 'Endpoint documentation not found',
-                    available_endpoints: (0, apiMetadata_js_1.findRelatedEndpoints)(path)
+                    available_endpoints: findRelatedEndpoints(path)
                 }
             };
         }
         return {
             documentation: metadata,
-            related_endpoints: (0, apiMetadata_js_1.findRelatedEndpoints)(path)
+            related_endpoints: findRelatedEndpoints(path)
         };
     }
 };
@@ -71,4 +69,3 @@ function formatUptime(seconds) {
     seconds -= minutes * 60;
     return `${days}d ${hours}h ${minutes}m ${Math.floor(seconds)}s`;
 }
-//# sourceMappingURL=service.js.map

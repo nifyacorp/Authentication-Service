@@ -1,18 +1,8 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.STATE_TOKEN_EXPIRY = exports.STATE_TOKEN_BYTES = exports.GOOGLE_SCOPES = exports.GOOGLE_REDIRECT_URI = void 0;
-exports.initializeOAuthConfig = initializeOAuthConfig;
-exports.getGoogleCredentials = getGoogleCredentials;
-exports.generateStateToken = generateStateToken;
-exports.validateStateToken = validateStateToken;
-const dotenv_1 = require("dotenv");
-const crypto_1 = __importDefault(require("crypto"));
-const secret_manager_1 = require("@google-cloud/secret-manager");
-(0, dotenv_1.config)();
-const secretManagerClient = new secret_manager_1.SecretManagerServiceClient();
+import { config } from 'dotenv';
+import crypto from 'crypto';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+config();
+const secretManagerClient = new SecretManagerServiceClient();
 async function getSecret(secretName) {
     try {
         const name = `projects/delta-entity-447812-p2/secrets/${secretName}/versions/latest`;
@@ -29,7 +19,7 @@ async function getSecret(secretName) {
 }
 let GOOGLE_CLIENT_ID = '';
 let GOOGLE_CLIENT_SECRET = '';
-async function initializeOAuthConfig() {
+export async function initializeOAuthConfig() {
     try {
         [GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET] = await Promise.all([
             getSecret('OAUTH_CLIENT'),
@@ -42,7 +32,7 @@ async function initializeOAuthConfig() {
         throw error;
     }
 }
-function getGoogleCredentials() {
+export function getGoogleCredentials() {
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
         throw new Error('OAuth credentials not initialized');
     }
@@ -51,9 +41,9 @@ function getGoogleCredentials() {
         clientSecret: GOOGLE_CLIENT_SECRET
     };
 }
-exports.GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/google/callback';
+export const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/google/callback';
 // OAuth scopes for user profile and email
-exports.GOOGLE_SCOPES = [
+export const GOOGLE_SCOPES = [
     'openid', // Required for OpenID Connect
     'email', // User's email address
     'profile', // Basic profile information
@@ -61,24 +51,24 @@ exports.GOOGLE_SCOPES = [
     'https://www.googleapis.com/auth/userinfo.profile' // Basic profile info (read-only)
 ];
 // State token configuration
-exports.STATE_TOKEN_BYTES = 32; // 256 bits
-exports.STATE_TOKEN_EXPIRY = 10 * 60 * 1000; // 10 minutes in milliseconds
+export const STATE_TOKEN_BYTES = 32; // 256 bits
+export const STATE_TOKEN_EXPIRY = 10 * 60 * 1000; // 10 minutes in milliseconds
 // In-memory state store (replace with Redis in production)
 const stateStore = new Map();
 // Clean up expired states periodically
 setInterval(() => {
     const now = Date.now();
     for (const [state, data] of stateStore.entries()) {
-        if (now - data.timestamp > exports.STATE_TOKEN_EXPIRY) {
+        if (now - data.timestamp > STATE_TOKEN_EXPIRY) {
             stateStore.delete(state);
         }
     }
 }, 60 * 1000); // Clean up every minute
-function generateStateToken() {
+export function generateStateToken() {
     // Generate random state token
-    const stateToken = crypto_1.default.randomBytes(exports.STATE_TOKEN_BYTES).toString('hex');
+    const stateToken = crypto.randomBytes(STATE_TOKEN_BYTES).toString('hex');
     // Generate nonce for additional security
-    const nonce = crypto_1.default.randomBytes(16).toString('hex');
+    const nonce = crypto.randomBytes(16).toString('hex');
     // Store state data
     stateStore.set(stateToken, {
         timestamp: Date.now(),
@@ -86,13 +76,13 @@ function generateStateToken() {
     });
     return { state: stateToken, nonce };
 }
-function validateStateToken(state, nonce) {
+export function validateStateToken(state, nonce) {
     const stateData = stateStore.get(state);
     if (!stateData) {
         return false;
     }
     // Check expiration
-    if (Date.now() - stateData.timestamp > exports.STATE_TOKEN_EXPIRY) {
+    if (Date.now() - stateData.timestamp > STATE_TOKEN_EXPIRY) {
         stateStore.delete(state);
         return false;
     }
@@ -104,4 +94,3 @@ function validateStateToken(state, nonce) {
     stateStore.delete(state);
     return true;
 }
-//# sourceMappingURL=oauth.js.map

@@ -1,19 +1,13 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.changePassword = exports.resetPassword = exports.forgotPassword = void 0;
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const validation_js_1 = require("../../utils/validation.js");
-const jwt_js_1 = require("../../config/jwt.js");
-const ErrorResponseBuilder_js_1 = require("../../shared/errors/ErrorResponseBuilder.js");
-const forgotPassword = async (req, res, next) => {
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { signupSchema } from '../../utils/validation.js';
+import { getJwtSecret, RESET_TOKEN_EXPIRES_IN, MAX_PASSWORD_RESET_REQUESTS, PASSWORD_RESET_WINDOW } from '../../config/jwt.js';
+import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
+export const forgotPassword = async (req, res, next) => {
     try {
         const { email } = req.body;
         if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-            return next(ErrorResponseBuilder_js_1.errorBuilders.badRequest(req, 'Invalid email address'));
+            return next(errorBuilders.badRequest(req, 'Invalid email address'));
         }
         // TODO: Replace with actual database query
         const user = {
@@ -28,24 +22,24 @@ const forgotPassword = async (req, res, next) => {
             });
         }
         const now = Date.now();
-        const recentAttempts = user.passwordResetAttempts.filter(timestamp => now - timestamp < jwt_js_1.PASSWORD_RESET_WINDOW);
-        if (recentAttempts.length >= jwt_js_1.MAX_PASSWORD_RESET_REQUESTS) {
-            return next(ErrorResponseBuilder_js_1.errorBuilders.tooManyRequests(req, 'Too many reset attempts. Please try again later.', {
-                retryAfter: new Date(recentAttempts[0] + jwt_js_1.PASSWORD_RESET_WINDOW).toISOString()
+        const recentAttempts = user.passwordResetAttempts.filter(timestamp => now - timestamp < PASSWORD_RESET_WINDOW);
+        if (recentAttempts.length >= MAX_PASSWORD_RESET_REQUESTS) {
+            return next(errorBuilders.tooManyRequests(req, 'Too many reset attempts. Please try again later.', {
+                retryAfter: new Date(recentAttempts[0] + PASSWORD_RESET_WINDOW).toISOString()
             }));
         }
-        const secret = await (0, jwt_js_1.getJwtSecret)();
-        const resetToken = jsonwebtoken_1.default.sign({
+        const secret = await getJwtSecret();
+        const resetToken = jwt.sign({
             userId: user.id,
             type: 'password_reset'
-        }, secret, { expiresIn: jwt_js_1.RESET_TOKEN_EXPIRES_IN });
+        }, secret, { expiresIn: RESET_TOKEN_EXPIRES_IN });
         try {
             // TODO: Implement email sending
             console.log(`Password reset email sent to: ${email}`);
         }
         catch (emailError) {
             console.error('Failed to send password reset email:', emailError);
-            return next(ErrorResponseBuilder_js_1.errorBuilders.serverError(req, emailError instanceof Error ? emailError : new Error('Failed to send reset email')));
+            return next(errorBuilders.serverError(req, emailError instanceof Error ? emailError : new Error('Failed to send reset email')));
         }
         res.status(200).json({
             message: 'If your email is registered, you will receive password reset instructions'
@@ -53,44 +47,42 @@ const forgotPassword = async (req, res, next) => {
     }
     catch (error) {
         console.error('Forgot password error:', error);
-        return next(ErrorResponseBuilder_js_1.errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
+        return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
     }
 };
-exports.forgotPassword = forgotPassword;
-const resetPassword = async (req, res, next) => {
+export const resetPassword = async (req, res, next) => {
     try {
         const { token, newPassword } = req.body;
         // TODO: Implementation will be added later
         res.status(200).json({ message: 'Password reset successfully' });
     }
     catch (error) {
-        return next(ErrorResponseBuilder_js_1.errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
+        return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
     }
 };
-exports.resetPassword = resetPassword;
-const changePassword = async (req, res, next) => {
+export const changePassword = async (req, res, next) => {
     try {
         const { currentPassword, newPassword } = req.body;
         const authHeader = req.headers.authorization;
-        const secret = await (0, jwt_js_1.getJwtSecret)();
+        const secret = await getJwtSecret();
         if (!authHeader?.startsWith('Bearer ')) {
-            return next(ErrorResponseBuilder_js_1.errorBuilders.unauthorized(req, 'Missing or invalid token'));
+            return next(errorBuilders.unauthorized(req, 'Missing or invalid token'));
         }
         const token = authHeader.split(' ')[1];
         let userId;
         try {
-            const decoded = jsonwebtoken_1.default.verify(token, secret);
+            const decoded = jwt.verify(token, secret);
             userId = decoded.userId;
         }
         catch (jwtError) {
-            return next(ErrorResponseBuilder_js_1.errorBuilders.unauthorized(req, 'Invalid or expired token'));
+            return next(errorBuilders.unauthorized(req, 'Invalid or expired token'));
         }
         // Validate new password format
         try {
-            validation_js_1.signupSchema.shape.password.parse(newPassword);
+            signupSchema.shape.password.parse(newPassword);
         }
         catch (error) {
-            return next(ErrorResponseBuilder_js_1.errorBuilders.badRequest(req, 'Invalid password format', {
+            return next(errorBuilders.badRequest(req, 'Invalid password format', {
                 details: 'Password must be at least 8 characters, contain uppercase, number, and special character'
             }));
         }
@@ -98,16 +90,16 @@ const changePassword = async (req, res, next) => {
         const user = {
             id: userId,
             email: 'user@example.com',
-            password: await bcryptjs_1.default.hash('CurrentPass123!', 10)
+            password: await bcrypt.hash('CurrentPass123!', 10)
         };
         // Verify current password
-        const isValidPassword = await bcryptjs_1.default.compare(currentPassword, user.password);
+        const isValidPassword = await bcrypt.compare(currentPassword, user.password);
         if (!isValidPassword) {
-            return next(ErrorResponseBuilder_js_1.errorBuilders.unauthorized(req, 'Current password is incorrect'));
+            return next(errorBuilders.unauthorized(req, 'Current password is incorrect'));
         }
         // Hash new password
-        const salt = await bcryptjs_1.default.genSalt(10);
-        const hashedPassword = await bcryptjs_1.default.hash(newPassword, salt);
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
         try {
             // TODO: Database operations:
             // 1. Update user's password
@@ -144,13 +136,11 @@ const changePassword = async (req, res, next) => {
         }
         catch (dbError) {
             console.error('Database error during password change:', dbError);
-            return next(ErrorResponseBuilder_js_1.errorBuilders.serverError(req, dbError instanceof Error ? dbError : new Error('Failed to update password')));
+            return next(errorBuilders.serverError(req, dbError instanceof Error ? dbError : new Error('Failed to update password')));
         }
     }
     catch (error) {
         console.error('Change password error:', error);
-        return next(ErrorResponseBuilder_js_1.errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
+        return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
     }
 };
-exports.changePassword = changePassword;
-//# sourceMappingURL=password.controller.js.map

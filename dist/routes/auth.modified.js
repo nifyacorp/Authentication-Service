@@ -1,10 +1,7 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.authRouter = void 0;
-const express_1 = require("express");
-const index_js_1 = require("../controllers/auth/index.js");
-const jwt_js_1 = require("../utils/jwt.js");
-exports.authRouter = (0, express_1.Router)();
+import { Router } from 'express';
+import { signup, login, getCurrentUser, verifyEmail, logout, refreshToken, revokeAllSessions, forgotPassword, resetPassword, changePassword, getGoogleAuthUrl, handleGoogleCallback } from '../controllers/auth/index.js';
+import { generateAccessToken, generateRefreshToken } from '../utils/jwt.js';
+export const authRouter = Router();
 // Special middleware for test account
 const testAccountMiddleware = async (req, res, next) => {
     // Special case for test account
@@ -13,8 +10,8 @@ const testAccountMiddleware = async (req, res, next) => {
         // Generate tokens for test account
         const testUserId = '1';
         const [accessToken, refreshToken] = await Promise.all([
-            (0, jwt_js_1.generateAccessToken)(testUserId, req.body.email, 'NIFYA Test User', true),
-            (0, jwt_js_1.generateRefreshToken)(testUserId, req.body.email)
+            generateAccessToken(testUserId, req.body.email, 'NIFYA Test User', true),
+            generateRefreshToken(testUserId, req.body.email)
         ]);
         // Return success response for test account
         return res.json({
@@ -32,19 +29,18 @@ const testAccountMiddleware = async (req, res, next) => {
     next();
 };
 // User management
-exports.authRouter.post('/login', testAccountMiddleware, index_js_1.login);
-exports.authRouter.post('/signup', index_js_1.signup);
-exports.authRouter.get('/me', index_js_1.getCurrentUser);
-exports.authRouter.post('/verify-email', index_js_1.verifyEmail);
+authRouter.post('/login', testAccountMiddleware, login);
+authRouter.post('/signup', signup);
+authRouter.get('/me', getCurrentUser);
+authRouter.post('/verify-email', verifyEmail);
 // Session management
-exports.authRouter.post('/logout', index_js_1.logout);
-exports.authRouter.post('/refresh', index_js_1.refreshToken);
-exports.authRouter.post('/revoke-all-sessions', index_js_1.revokeAllSessions);
+authRouter.post('/logout', logout);
+authRouter.post('/refresh', refreshToken);
+authRouter.post('/revoke-all-sessions', revokeAllSessions);
 // Password management
-exports.authRouter.post('/forgot-password', index_js_1.forgotPassword);
-exports.authRouter.post('/reset-password', index_js_1.resetPassword);
-exports.authRouter.post('/change-password', index_js_1.changePassword);
+authRouter.post('/forgot-password', forgotPassword);
+authRouter.post('/reset-password', resetPassword);
+authRouter.post('/change-password', changePassword);
 // OAuth routes
-exports.authRouter.post('/google/login', index_js_1.getGoogleAuthUrl);
-exports.authRouter.get('/google/callback', index_js_1.handleGoogleCallback);
-//# sourceMappingURL=auth.modified.js.map
+authRouter.post('/google/login', getGoogleAuthUrl);
+authRouter.get('/google/callback', handleGoogleCallback);
