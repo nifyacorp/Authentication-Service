@@ -41,7 +41,7 @@ export class HealthController {
         // Check database connectivity
         await this.dbClient.query('SELECT 1');
         dbStatus = 'connected';
-      } catch (error) {
+      } catch (error: any) {
         dbStatus = 'error';
         dbError = error.message;
       }

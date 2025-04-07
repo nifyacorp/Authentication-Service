@@ -1,4 +1,7 @@
-import { getPool } from '../config/database.js';
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.queries = void 0;
+const database_js_1 = require("../config/database.js");
 // Debug function to log query execution
 async function executeQuery(query, params = []) {
     console.log('Executing query:', {
@@ -6,7 +9,7 @@ async function executeQuery(query, params = []) {
         params: params.map(p => p === null ? 'null' : String(p))
     });
     try {
-        const result = await getPool().query(query, params);
+        const result = await (0, database_js_1.getPool)().query(query, params);
         console.log('Query result:', {
             rowCount: result.rowCount,
             firstRow: result.rows[0] ? '(data)' : null
@@ -18,7 +21,7 @@ async function executeQuery(query, params = []) {
         throw error;
     }
 }
-export const queries = {
+exports.queries = {
     // User queries
     createUser: async (email, passwordHash, name, googleId, pictureUrl) => {
         const result = await executeQuery(`INSERT INTO users (email, password_hash, name, google_id, picture_url, email_verified)
@@ -77,3 +80,4 @@ export const queries = {
         await executeQuery('UPDATE password_reset_requests SET used = true WHERE token = $1', [token]);
     }
 };
+//# sourceMappingURL=index.js.map

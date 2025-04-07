@@ -145,7 +145,7 @@ export class PostgresUserRepository implements UserRepository {
       }
       
       return result.rows[0];
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating user:', error);
       
       if (error.code === createUserNotFoundError().code) {

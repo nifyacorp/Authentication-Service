@@ -1,5 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.apiDefinitions = void 0;
+exports.getEndpointMetadata = getEndpointMetadata;
+exports.findRelatedEndpoints = findRelatedEndpoints;
+exports.getAllEndpoints = getAllEndpoints;
 // API definitions
-export const apiDefinitions = {
+exports.apiDefinitions = {
     "/api/auth/login": {
         "POST": {
             "description": "Authenticate a user and receive JWT tokens",
@@ -240,17 +246,17 @@ export const apiDefinitions = {
 /**
  * Get metadata for a specific endpoint and method
  */
-export function getEndpointMetadata(path, method) {
+function getEndpointMetadata(path, method) {
     // Normalize the path and method
     const normalizedPath = path.replace(/\/$/, '');
     const normalizedMethod = method.toUpperCase();
     // Find the matching endpoint key
-    const endpointKey = Object.keys(apiDefinitions).find(key => normalizedPath === key || normalizedPath.match(new RegExp(`^${key.replace(/\//g, '\\/').replace(/\{[^}]+\}/g, '[^/]+')}$`)));
-    if (endpointKey && apiDefinitions[endpointKey][normalizedMethod]) {
+    const endpointKey = Object.keys(exports.apiDefinitions).find(key => normalizedPath === key || normalizedPath.match(new RegExp(`^${key.replace(/\//g, '\\/').replace(/\{[^}]+\}/g, '[^/]+')}$`)));
+    if (endpointKey && exports.apiDefinitions[endpointKey][normalizedMethod]) {
         return {
             path: endpointKey,
             method: normalizedMethod,
-            ...apiDefinitions[endpointKey][normalizedMethod]
+            ...exports.apiDefinitions[endpointKey][normalizedMethod]
         };
     }
     return null;
@@ -258,22 +264,22 @@ export function getEndpointMetadata(path, method) {
 /**
  * Find related endpoints based on a path
  */
-export function findRelatedEndpoints(path) {
+function findRelatedEndpoints(path) {
     const segments = path.split('/').filter(Boolean);
     const relatedEndpoints = [];
     // First, try to find exact matches
-    for (const key of Object.keys(apiDefinitions)) {
+    for (const key of Object.keys(exports.apiDefinitions)) {
         if (key === path) {
             relatedEndpoints.push({
                 path: key,
-                methods: Object.keys(apiDefinitions[key]),
-                description: apiDefinitions[key][Object.keys(apiDefinitions[key])[0]].description.split('.')[0]
+                methods: Object.keys(exports.apiDefinitions[key]),
+                description: exports.apiDefinitions[key][Object.keys(exports.apiDefinitions[key])[0]].description.split('.')[0]
             });
         }
     }
     // Then, find endpoints with similar path segments
     if (relatedEndpoints.length < 5 && segments.length > 0) {
-        for (const key of Object.keys(apiDefinitions)) {
+        for (const key of Object.keys(exports.apiDefinitions)) {
             if (relatedEndpoints.some(e => e.path === key))
                 continue;
             const keySegments = key.split('/').filter(Boolean);
@@ -281,8 +287,8 @@ export function findRelatedEndpoints(path) {
             if (commonSegments.length > 0) {
                 relatedEndpoints.push({
                     path: key,
-                    methods: Object.keys(apiDefinitions[key]),
-                    description: apiDefinitions[key][Object.keys(apiDefinitions[key])[0]].description.split('.')[0]
+                    methods: Object.keys(exports.apiDefinitions[key]),
+                    description: exports.apiDefinitions[key][Object.keys(exports.apiDefinitions[key])[0]].description.split('.')[0]
                 });
             }
         }
@@ -291,11 +297,11 @@ export function findRelatedEndpoints(path) {
     if (relatedEndpoints.length < 3) {
         const defaultEndpoints = ['/api/auth/login', '/api/auth/signup', '/api/auth/profile'];
         for (const key of defaultEndpoints) {
-            if (apiDefinitions[key] && !relatedEndpoints.some(e => e.path === key)) {
+            if (exports.apiDefinitions[key] && !relatedEndpoints.some(e => e.path === key)) {
                 relatedEndpoints.push({
                     path: key,
-                    methods: Object.keys(apiDefinitions[key]),
-                    description: apiDefinitions[key][Object.keys(apiDefinitions[key])[0]].description.split('.')[0]
+                    methods: Object.keys(exports.apiDefinitions[key]),
+                    description: exports.apiDefinitions[key][Object.keys(exports.apiDefinitions[key])[0]].description.split('.')[0]
                 });
             }
         }
@@ -305,10 +311,11 @@ export function findRelatedEndpoints(path) {
 /**
  * Get all available endpoints
  */
-export function getAllEndpoints() {
-    return Object.keys(apiDefinitions).map(path => ({
+function getAllEndpoints() {
+    return Object.keys(exports.apiDefinitions).map(path => ({
         path,
-        methods: Object.keys(apiDefinitions[path]),
-        description: apiDefinitions[path][Object.keys(apiDefinitions[path])[0]].description.split('.')[0]
+        methods: Object.keys(exports.apiDefinitions[path]),
+        description: exports.apiDefinitions[path][Object.keys(exports.apiDefinitions[path])[0]].description.split('.')[0]
     }));
 }
+//# sourceMappingURL=apiMetadata.js.map

@@ -1,8 +1,12 @@
-import { getEndpointMetadata, findRelatedEndpoints } from '../utils/apiMetadata.js';
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.errorBuilders = void 0;
+exports.buildErrorResponse = buildErrorResponse;
+const apiMetadata_js_1 = require("../utils/apiMetadata.js");
 /**
  * Build a standardized error response that includes self-documenting information
  */
-export function buildErrorResponse(req, options) {
+function buildErrorResponse(req, options) {
     const { code = 'UNKNOWN_ERROR', message = 'An error occurred while processing your request.', statusCode = 500, details = null, error = null } = options;
     // Basic error structure
     const errorResponse = {
@@ -25,7 +29,7 @@ export function buildErrorResponse(req, options) {
     const path = req.path;
     const method = req.method;
     // Get endpoint metadata
-    const endpointMetadata = getEndpointMetadata(path, method);
+    const endpointMetadata = (0, apiMetadata_js_1.getEndpointMetadata)(path, method);
     if (endpointMetadata) {
         // If we have metadata for this endpoint, include it
         errorResponse.error.help = {
@@ -34,7 +38,7 @@ export function buildErrorResponse(req, options) {
                 auth_required: endpointMetadata.auth_required,
                 method: endpointMetadata.method
             },
-            related_endpoints: findRelatedEndpoints(path),
+            related_endpoints: (0, apiMetadata_js_1.findRelatedEndpoints)(path),
             documentation_url: `https://docs.nifya.app/api/auth/${path.split('/').slice(3).join('/')}`
         };
         // Add required parameters if available
@@ -52,7 +56,7 @@ export function buildErrorResponse(req, options) {
         // If we don't have specific metadata, provide general API info
         errorResponse.error.help = {
             message: "We couldn't find specific documentation for this endpoint. Here are some available endpoints:",
-            available_endpoints: findRelatedEndpoints(path).slice(0, 5),
+            available_endpoints: (0, apiMetadata_js_1.findRelatedEndpoints)(path).slice(0, 5),
             documentation_url: "https://docs.nifya.app/api/auth"
         };
     }
@@ -62,7 +66,7 @@ export function buildErrorResponse(req, options) {
     };
 }
 // Common error builders
-export const errorBuilders = {
+exports.errorBuilders = {
     badRequest: (req, message, details = null) => buildErrorResponse(req, {
         code: 'BAD_REQUEST',
         message,
@@ -119,3 +123,4 @@ export const errorBuilders = {
         details
     })
 };
+//# sourceMappingURL=ErrorResponseBuilder.js.map

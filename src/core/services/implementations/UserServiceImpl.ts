@@ -5,6 +5,7 @@ import { PasswordResetRepository } from '../../repositories/PasswordResetReposit
 import { EmailVerificationRepository } from '../../repositories/EmailVerificationRepository';
 import { TokenService } from '../TokenService';
 import { EmailService } from '../EmailService';
+import { TokenType } from '../../entities/Token';
 import { 
   AppError, 
   createUserNotFoundError, 
@@ -161,7 +162,7 @@ export class UserServiceImpl implements UserService {
   public async resetPassword(token: string, newPassword: string): Promise<void> {
     try {
       // Verify the token
-      const payload = await this.tokenService.verifyToken(token, 'password_reset');
+      const payload = await this.tokenService.verifyToken(token, TokenType.PASSWORD_RESET);
       
       // Find the password reset request
       const resetRequest = await this.passwordResetRepository.findByToken(token);
@@ -243,7 +244,7 @@ export class UserServiceImpl implements UserService {
   public async verifyEmail(token: string): Promise<void> {
     try {
       // Verify the token
-      const payload = await this.tokenService.verifyToken(token, 'email_verification');
+      const payload = await this.tokenService.verifyToken(token, TokenType.EMAIL_VERIFICATION);
       
       // Find the verification request
       const verificationRequest = await this.emailVerificationRepository.findByToken(token);

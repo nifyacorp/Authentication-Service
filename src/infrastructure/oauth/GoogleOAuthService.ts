@@ -60,8 +60,8 @@ export class GoogleOAuthService {
       
       return {
         access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        id_token: tokens.id_token,
+        refresh_token: tokens.refresh_token || undefined,
+        id_token: tokens.id_token || undefined,
         expiry_date: tokens.expiry_date || 0
       };
     } catch (error) {
@@ -112,7 +112,7 @@ export class GoogleOAuthService {
     try {
       const ticket = await this.client.verifyIdToken({
         idToken,
-        audience: this.client.clientId_
+        audience: this.client._clientId as string
       });
       
       const payload = ticket.getPayload();
@@ -125,7 +125,7 @@ export class GoogleOAuthService {
         userId: payload.sub,
         email: payload.email,
         emailVerified: payload.email_verified || false,
-        name: payload.name
+        name: payload.name || undefined
       };
     } catch (error) {
       console.error('Error verifying ID token:', error);

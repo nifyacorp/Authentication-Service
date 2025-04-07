@@ -1,28 +1,38 @@
-import jwt from 'jsonwebtoken';
-import { getJwtSecret, ACCESS_TOKEN_EXPIRES_IN, REFRESH_TOKEN_EXPIRES_IN } from '../config/jwt.js';
-export const generateEmailVerificationToken = async (sub, email) => {
-    const secret = await getJwtSecret();
-    return jwt.sign({
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.generateRefreshToken = exports.generateAccessToken = exports.generateEmailVerificationToken = void 0;
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const jwt_js_1 = require("../config/jwt.js");
+const generateEmailVerificationToken = async (sub, email) => {
+    const secret = await (0, jwt_js_1.getJwtSecret)();
+    return jsonwebtoken_1.default.sign({
         sub,
         email,
         type: 'email_verification'
     }, secret, { expiresIn: '24h' });
 };
-export const generateAccessToken = async (sub, email, name, emailVerified = false) => {
-    const secret = await getJwtSecret();
-    return jwt.sign({
+exports.generateEmailVerificationToken = generateEmailVerificationToken;
+const generateAccessToken = async (sub, email, name, emailVerified = false) => {
+    const secret = await (0, jwt_js_1.getJwtSecret)();
+    return jsonwebtoken_1.default.sign({
         sub,
         email,
         name: name || email.split('@')[0],
         email_verified: emailVerified,
         type: 'access'
-    }, secret, { expiresIn: ACCESS_TOKEN_EXPIRES_IN });
+    }, secret, { expiresIn: jwt_js_1.ACCESS_TOKEN_EXPIRES_IN });
 };
-export const generateRefreshToken = async (sub, email) => {
-    const secret = await getJwtSecret();
-    return jwt.sign({
+exports.generateAccessToken = generateAccessToken;
+const generateRefreshToken = async (sub, email) => {
+    const secret = await (0, jwt_js_1.getJwtSecret)();
+    return jsonwebtoken_1.default.sign({
         sub,
         email,
         type: 'refresh'
-    }, secret, { expiresIn: REFRESH_TOKEN_EXPIRES_IN });
+    }, secret, { expiresIn: jwt_js_1.REFRESH_TOKEN_EXPIRES_IN });
 };
+exports.generateRefreshToken = generateRefreshToken;
+//# sourceMappingURL=jwt.js.map

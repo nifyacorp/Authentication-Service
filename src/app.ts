@@ -100,7 +100,7 @@ export class App {
         user: process.env.SMTP_USER || 'user',
         pass: process.env.SMTP_PASSWORD || 'password'
       }
-    };
+    } as any;
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
     const fromEmail = process.env.FROM_EMAIL || 'noreply@example.com';
     const projectId = process.env.GCP_PROJECT_ID || 'project-id';

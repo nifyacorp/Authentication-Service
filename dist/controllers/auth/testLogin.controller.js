@@ -1,5 +1,8 @@
-import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
-export const testLogin = async (req, res, next) => {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.testLogin = void 0;
+const jwt_js_1 = require("../../utils/jwt.js");
+const testLogin = async (req, res, next) => {
     try {
         console.log('Checking for test account login');
         const { email, password } = req.body;
@@ -9,8 +12,8 @@ export const testLogin = async (req, res, next) => {
             // Generate tokens for test account
             const testUserId = '1';
             const [accessToken, refreshToken] = await Promise.all([
-                generateAccessToken(testUserId, email, 'NIFYA Test User', true),
-                generateRefreshToken(testUserId, email)
+                (0, jwt_js_1.generateAccessToken)(testUserId, email, 'NIFYA Test User', true),
+                (0, jwt_js_1.generateRefreshToken)(testUserId, email)
             ]);
             // Return success response for test account
             return res.json({
@@ -32,3 +35,5 @@ export const testLogin = async (req, res, next) => {
         next(error);
     }
 };
+exports.testLogin = testLogin;
+//# sourceMappingURL=testLogin.controller.js.map

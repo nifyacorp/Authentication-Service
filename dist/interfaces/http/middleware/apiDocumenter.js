@@ -1,13 +1,16 @@
-import { getEndpointMetadata } from '../../../shared/utils/apiMetadata.js';
-import { errorBuilders } from '../../../shared/errors/ErrorResponseBuilder.js';
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.apiDocumenter = apiDocumenter;
+const apiMetadata_js_1 = require("../../../shared/utils/apiMetadata.js");
+const ErrorResponseBuilder_js_1 = require("../../../shared/errors/ErrorResponseBuilder.js");
 /**
  * Middleware to validate requests against API metadata and provide self-documenting errors
  */
-export function apiDocumenter(req, res, next) {
+function apiDocumenter(req, res, next) {
     // Get metadata for this endpoint
     const path = req.path;
     const method = req.method;
-    const metadata = getEndpointMetadata(path, method);
+    const metadata = (0, apiMetadata_js_1.getEndpointMetadata)(path, method);
     // If no metadata found, continue without validation
     if (!metadata) {
         return next();
@@ -29,7 +32,7 @@ export function apiDocumenter(req, res, next) {
             }
         });
         if (Object.keys(errors).length > 0) {
-            const { statusCode, body } = errorBuilders.validationError(req, errors);
+            const { statusCode, body } = ErrorResponseBuilder_js_1.errorBuilders.validationError(req, errors);
             return res.status(statusCode).json(body);
         }
     }
@@ -42,7 +45,7 @@ export function apiDocumenter(req, res, next) {
             }
         });
         if (Object.keys(errors).length > 0) {
-            const { statusCode, body } = errorBuilders.validationError(req, errors);
+            const { statusCode, body } = ErrorResponseBuilder_js_1.errorBuilders.validationError(req, errors);
             return res.status(statusCode).json(body);
         }
     }
@@ -55,10 +58,11 @@ export function apiDocumenter(req, res, next) {
             }
         });
         if (Object.keys(errors).length > 0) {
-            const { statusCode, body } = errorBuilders.validationError(req, errors);
+            const { statusCode, body } = ErrorResponseBuilder_js_1.errorBuilders.validationError(req, errors);
             return res.status(statusCode).json(body);
         }
     }
     // If all validations pass, continue
     next();
 }
+//# sourceMappingURL=apiDocumenter.js.map

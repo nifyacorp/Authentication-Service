@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noImplicitReturns": false
+  },
+  "exclude": [
+    "node_modules", 
+    "dist",
+    "src/core/apiExplorer_backup",
+    "src/interfaces/http_backup"
+  ]
+}

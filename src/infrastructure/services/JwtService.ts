@@ -1,4 +1,4 @@
-import { sign, verify } from 'jsonwebtoken';
+import { sign, verify, SignOptions } from 'jsonwebtoken';
 import { TokenService } from '../../core/services/TokenService';
 import { JwtPayload, TokenType } from '../../core/entities/Token';
 import { 
@@ -32,7 +32,7 @@ export class JwtTokenService implements TokenService {
       type: TokenType.ACCESS
     };
 
-    return sign(payload, this.secret, { expiresIn: this.accessTokenExpiresIn });
+    return sign(payload, this.secret, { expiresIn: this.accessTokenExpiresIn } as SignOptions);
   }
 
   /**
@@ -46,7 +46,7 @@ export class JwtTokenService implements TokenService {
       jti: crypto.randomUUID() // Add a unique token identifier
     };
 
-    const token = sign(payload, this.secret, { expiresIn: this.refreshTokenExpiresIn });
+    const token = sign(payload, this.secret, { expiresIn: this.refreshTokenExpiresIn } as SignOptions);
     
     // Store the refresh token in the database
     const expiresAt = new Date();
@@ -67,7 +67,7 @@ export class JwtTokenService implements TokenService {
       type: TokenType.EMAIL_VERIFICATION
     };
 
-    return sign(payload, this.secret, { expiresIn: this.verificationTokenExpiresIn });
+    return sign(payload, this.secret, { expiresIn: this.verificationTokenExpiresIn } as SignOptions);
   }
 
   /**
@@ -80,7 +80,7 @@ export class JwtTokenService implements TokenService {
       type: TokenType.PASSWORD_RESET
     };
 
-    return sign(payload, this.secret, { expiresIn: this.passwordResetTokenExpiresIn });
+    return sign(payload, this.secret, { expiresIn: this.passwordResetTokenExpiresIn } as SignOptions);
   }
 
   /**
@@ -116,7 +116,7 @@ export class JwtTokenService implements TokenService {
       }
       
       return decoded;
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof AppError) {
         throw error;
       }
@@ -140,7 +140,7 @@ export class JwtTokenService implements TokenService {
     try {
       const count = await this.tokenRepository.deleteExpiredTokens();
       console.log(`Deleted ${count} expired tokens`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error cleaning up expired tokens:', error);
       throw createInternalError('Failed to clean up expired tokens', { error });
     }

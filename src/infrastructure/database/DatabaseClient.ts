@@ -39,7 +39,7 @@ export class DatabaseClient {
   /**
    * Execute a query with parameters
    */
-  public async query<T = any>(text: string, params: any[] = []): Promise<QueryResult<T>> {
+  public async query<T extends Record<string, any> = any>(text: string, params: any[] = []): Promise<QueryResult<T>> {
     try {
       return await this.pool.query<T>(text, params);
     } catch (error) {

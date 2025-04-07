@@ -1,8 +1,15 @@
-import pkg from 'pg';
-import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
-import fs from 'fs';
-const { Pool } = pkg;
-const secretManagerClient = new SecretManagerServiceClient();
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.initializePool = initializePool;
+exports.getPool = getPool;
+const pg_1 = __importDefault(require("pg"));
+const secret_manager_1 = require("@google-cloud/secret-manager");
+const fs_1 = __importDefault(require("fs"));
+const { Pool } = pg_1.default;
+const secretManagerClient = new secret_manager_1.SecretManagerServiceClient();
 async function getDbPassword() {
     try {
         const secretName = 'projects/delta-entity-447812-p2/secrets/auth-db-app-password/versions/latest';
@@ -18,14 +25,14 @@ async function getDbPassword() {
     }
 }
 let pool;
-export async function initializePool() {
+async function initializePool() {
     try {
         const dbPassword = await getDbPassword();
         // Debug: Check if Unix socket exists
         const socketPath = '/cloudsql/delta-entity-447812-p2:us-central1:auth-service-db/.s.PGSQL.5432';
         console.log('Checking Cloud SQL socket path...');
         try {
-            fs.accessSync(socketPath.split('/.s.PGSQL.5432')[0], fs.constants.F_OK);
+            fs_1.default.accessSync(socketPath.split('/.s.PGSQL.5432')[0], fs_1.default.constants.F_OK);
             console.log('Cloud SQL socket directory exists');
             // Add a small delay to ensure socket is ready
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -93,7 +100,7 @@ export async function initializePool() {
         throw err;
     }
 }
-export function getPool() {
+function getPool() {
     if (!pool) {
         throw new Error('Database pool not initialized');
     }
@@ -183,3 +190,4 @@ async function initializeSchema() {
         throw error;
     }
 }
+//# sourceMappingURL=database.js.map
