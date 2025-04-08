@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-import { authRouter } from './routes/auth.js';
+import { authRouter, v1AuthRouter } from './routes/auth.js';
 import { initializePool } from './config/database.js';
 import { initializeOAuthConfig } from './config/oauth.js';
 import { Request, Response, NextFunction } from 'express';
@@ -13,6 +13,9 @@ import { errorBuilders } from './shared/errors/ErrorResponseBuilder.js';
 
 const app = express();
 const port = parseInt(process.env.PORT || '8080', 10); // Convert to number
+
+// Use trusted proxies - this is important for Cloud Run behind a load balancer
+app.set('trust proxy', true);
 
 // CORS configuration
 const corsOptions = {
@@ -134,6 +137,7 @@ app.use(apiDocumenter);
 
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/v1/auth', v1AuthRouter);
 app.use('/api', apiExplorerRouter);
 
 // Health check endpoint (legacy - kept for backward compatibility)
