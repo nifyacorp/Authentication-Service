@@ -72,70 +72,112 @@ export const logout = async (req: AuthRequest<any, any, RefreshTokenBody>, res: 
 
 export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>, res: Response, next: NextFunction) => {
   try {
-    console.log('Processing refresh token request');
+    console.group('📝 Auth Service - Processing refresh token request');
+    console.log('Request IP:', req.ip);
+    
     const { refreshToken } = req.body;
+    
+    console.log('Refresh token provided:', !!refreshToken);
     
     if (!refreshToken) {
       console.log('Missing refresh token');
+      console.groupEnd();
       return next(errorBuilders.badRequest(req, 'Refresh token is required'));
     }
     
     // Basic token format validation
-    if (typeof refreshToken !== 'string' || !refreshToken.match(/^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_.+/=]*$/)) {
-      console.log('Invalid refresh token format');
+    const isValidFormat = typeof refreshToken === 'string' && !!refreshToken.match(/^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_.+/=]*$/);
+    console.log('Token format validation:', isValidFormat ? 'Valid JWT format' : 'Invalid format');
+    
+    if (!isValidFormat) {
+      console.log('Invalid refresh token format:', refreshToken.substring(0, 10) + '...');
+      console.groupEnd();
       return next(errorBuilders.badRequest(req, 'Invalid refresh token format'));
     }
     
     try {
       const secret = await getJwtSecret();
+      console.log('JWT secret retrieved successfully');
       
       // Verify the refresh token's JWT format and type
+      console.log('Attempting to verify token...');
       const decoded = jwt.verify(refreshToken, secret) as { sub: string, type: string, email: string };
+      console.log('Token verified successfully');
+      console.log('Token claims:', {
+        userId: decoded.sub,
+        tokenType: decoded.type,
+        email: decoded.email
+      });
       
       if (decoded.type !== 'refresh') {
-        console.log('Invalid token type for refresh');
+        console.log('Invalid token type for refresh:', decoded.type);
+        console.groupEnd();
         return next(errorBuilders.badRequest(req, 'Invalid token type, expected refresh token'));
       }
       
       // Check if the refresh token exists and is valid in the database
+      console.log('Checking token in database...');
       const storedToken = await queries.getRefreshToken(refreshToken);
+      console.log('Token found in database:', !!storedToken);
       
       if (!storedToken) {
         console.log('Refresh token not found or revoked');
+        console.groupEnd();
         return next(errorBuilders.unauthorized(req, 'Invalid or expired refresh token'));
       }
       
       // Check if the token has expired
-      if (new Date() > new Date(storedToken.expires_at)) {
+      const now = new Date();
+      const expiry = new Date(storedToken.expires_at);
+      const isExpired = now > expiry;
+      console.log('Token expiration check:', {
+        now: now.toISOString(),
+        expiry: expiry.toISOString(),
+        isExpired,
+        timeLeft: isExpired ? 'Expired' : `${Math.floor((expiry.getTime() - now.getTime()) / 1000)} seconds`
+      });
+      
+      if (isExpired) {
         console.log('Refresh token has expired');
         await queries.revokeRefreshToken(refreshToken);
+        console.log('Expired token revoked in database');
+        console.groupEnd();
         return next(errorBuilders.unauthorized(req, 'Refresh token has expired'));
       }
       
       // Get the user
+      console.log('Looking up user:', decoded.sub);
       const user = await queries.getUserById(decoded.sub);
+      console.log('User found:', !!user);
       
       if (!user) {
         console.log('User not found for refresh token:', decoded.sub);
         await queries.revokeRefreshToken(refreshToken);
+        console.log('Token revoked due to missing user');
+        console.groupEnd();
         return next(errorBuilders.unauthorized(req, 'User not found'));
       }
       
       // Generate new tokens with required claims
+      console.log('Generating new tokens for user:', user.id);
       const [newAccessToken, newRefreshToken] = await Promise.all([
         generateAccessToken(user.id, user.email, user.name, user.email_verified),
         generateRefreshToken(user.id, user.email)
       ]);
+      console.log('New tokens generated successfully');
       
       // Revoke the old refresh token
+      console.log('Revoking old refresh token');
       await queries.revokeRefreshToken(refreshToken);
       
       // Store the new refresh token
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+      console.log('Storing new refresh token with expiry:', expiresAt.toISOString());
       await queries.createRefreshToken(user.id, newRefreshToken, expiresAt);
       
       console.log(`Tokens refreshed successfully for user: ${user.id}`);
+      console.groupEnd();
       
       res.json({
         accessToken: newAccessToken,
@@ -150,11 +192,17 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       });
     } catch (jwtError) {
       console.log('JWT verification failed:', jwtError);
+      console.log('Error type:', jwtError instanceof Error ? jwtError.constructor.name : typeof jwtError);
+      console.log('Error message:', jwtError instanceof Error ? jwtError.message : String(jwtError));
+      console.groupEnd();
       return next(errorBuilders.unauthorized(req, 'Invalid refresh token'));
     }
     
   } catch (error) {
     console.error('Refresh token error:', error);
+    console.log('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    console.log('Error message:', error instanceof Error ? error.message : String(error));
+    console.groupEnd();
     return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
 };
