@@ -166,6 +166,26 @@ export const apiDefinitions: ApiDefinitions = {
       }
     }
   },
+  "/api/v1/auth/refresh": {
+    "POST": {
+      "description": "Get a new access token using a refresh token (v1 API)",
+      "auth_required": false,
+      "body_parameters": [
+        { "name": "refreshToken", "type": "string", "description": "Refresh token", "required": true }
+      ],
+      "responses": {
+        "200": {
+          "description": "New access token",
+          "example": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          }
+        },
+        "401": {
+          "description": "Invalid or expired refresh token"
+        }
+      }
+    }
+  },
   "/api/auth/revoke-all-sessions": {
     "POST": {
       "description": "Revoke all active sessions for the current user",

@@ -78,3 +78,11 @@ authRouter.post('/change-password', changePassword);
 // OAuth routes
 authRouter.post('/google/login', getGoogleAuthUrl);
 authRouter.get('/google/callback', handleGoogleCallback);
+
+// v1 API namespace - add missing endpoints
+// Create a v1 sub-router
+const v1Router = Router();
+authRouter.use('/v1', v1Router);
+
+// Add v1 version of refresh token endpoint
+v1Router.post('/refresh', refreshToken);
