@@ -167,14 +167,32 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       console.log('New tokens generated successfully');
       
       // Revoke the old refresh token
-      console.log('Revoking old refresh token');
-      await queries.revokeRefreshToken(refreshToken);
-      
+      console.log(`Attempting to revoke old refresh token for user: ${user.id}. Token prefix: ${refreshToken.substring(0, 10)}...`);
+      try {
+        await queries.revokeRefreshToken(refreshToken);
+        console.log(`Successfully revoked old refresh token for user: ${user.id}.`);
+      } catch (revokeError) {
+        console.error(`Error explicitly revoking old refresh token for user ${user.id}:`, revokeError);
+        // Decide if we should proceed or error out. For now, we log and continue, 
+        // but this might leave the old token active if revocation fails.
+      }
+
       // Store the new refresh token
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
-      console.log('Storing new refresh token with expiry:', expiresAt.toISOString());
-      await queries.createRefreshToken(user.id, newRefreshToken, expiresAt);
+      console.log(`Attempting to store new refresh token for user: ${user.id}. Expiry: ${expiresAt.toISOString()}. Token prefix: ${newRefreshToken.substring(0, 10)}...`);
+      try {
+        await queries.createRefreshToken(user.id, newRefreshToken, expiresAt);
+        console.log(`Successfully stored new refresh token for user: ${user.id}.`);
+      } catch (createError) {
+        console.error(`Critical error storing new refresh token for user ${user.id}:`, createError);
+        console.log('Error type:', createError instanceof Error ? createError.constructor.name : typeof createError);
+        console.log('Error message:', createError instanceof Error ? createError.message : String(createError));
+        // If creating the new token fails, we cannot proceed.
+        console.groupEnd();
+        // Throw a specific error or call next with a server error
+        return next(errorBuilders.serverError(req, new Error('Failed to store new refresh token after generating it.')));
+      }
       
       console.log(`Tokens refreshed successfully for user: ${user.id}`);
       console.groupEnd();
