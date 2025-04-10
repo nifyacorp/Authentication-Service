@@ -850,3 +850,169 @@ gcloud run deploy nifya-auth-service \
 ## License
 
 This project is proprietary software owned by NIFYA.
+
+## Refactored Architecture (2025 Update)
+
+The Authentication Service has been completely refactored to improve maintainability, error handling, and separation of concerns. This document describes the new architecture and organization of the codebase.
+
+### Directory Structure
+
+The Authentication Service now follows a clean domain-driven design approach with a clear separation of concerns:
+
+```
+Authentication-Service/
+├── src/
+│   ├── auth/                    # Core authentication domain
+│   │   ├── controllers/         # HTTP request handlers
+│   │   ├── services/            # Business logic 
+│   │   ├── validation/          # Input validation
+│   │   ├── models/              # Data models and repositories
+│   │   └── errors/              # Error definitions and handling
+│   ├── database/                # Database connection and queries
+│   ├── middleware/              # Express middleware
+│   ├── utils/                   # Utility functions
+│   ├── api/                     # API routes definition
+│   └── index.ts                 # Application entry point
+└── supabase/                    # Database schema
+```
+
+### Key Architectural Features
+
+#### 1. Error Handling
+
+The service implements a standardized error handling approach:
+
+- **Centralized Error Factory**: All errors are created through a single factory function that ensures consistent format.
+- **Machine-Readable Error Codes**: Each error has a unique code for clients to reliably identify error types.
+- **Helpful Error Messages**: User-friendly messages with contextual help information.
+- **Self-Documenting Errors**: Error responses include additional context about related endpoints and documentation.
+
+Example error response:
+
+```json
+{
+  "error": {
+    "code": "EMAIL_EXISTS",
+    "message": "This email is already registered",
+    "status": 400,
+    "request_id": "12345-abcde",
+    "timestamp": "2025-04-10T14:22:15Z",
+    "help": {
+      "endpoint_info": {
+        "description": "Register a new user account",
+        "auth_required": false,
+        "method": "POST"
+      },
+      "related_endpoints": [
+        {
+          "path": "/api/auth/login",
+          "methods": ["POST"],
+          "description": "Login with existing account"
+        }
+      ],
+      "documentation_url": "https://docs.nifya.app/api/auth/signup"
+    }
+  }
+}
+```
+
+#### 2. Validation Layer
+
+Input validation is now handled by a dedicated middleware layer:
+
+- Uses Zod schemas for strong type checking and validation
+- Consistent error messages for validation failures
+- Centralized validation logic for all endpoints
+- Clear separation from business logic
+
+#### 3. Repository Pattern
+
+Database operations are encapsulated in repositories:
+
+- Abstraction layer between services and the database
+- Centralized query execution with error handling
+- Type-safe return values with defined interfaces
+- Simplified testing through mocking
+
+#### 4. Service Layer
+
+Business logic is isolated in service modules:
+
+- Pure business logic separated from HTTP concerns
+- Focused on domain operations rather than request/response handling
+- Easier to test and maintain
+- Centralized error handling
+
+#### 5. Controller Layer
+
+Controllers are now focused only on HTTP concerns:
+
+- Handling HTTP requests and responses
+- Translating between HTTP and domain models
+- Delegating business logic to services
+- No direct database access
+
+#### 6. Middleware-Based Security
+
+Security is implemented through middleware:
+
+- Authentication middleware for protected routes
+- Rate limiting to prevent abuse
+- CORS protection
+- Strong typing for authenticated requests
+
+### Installation and Setup
+
+The installation and setup process remains the same as before. The service requires:
+
+- Node.js 18.x or higher
+- PostgreSQL database
+- Environment variables for configuration
+
+### Benefits of the New Architecture
+
+1. **Improved Maintainability**: Clear separation of concerns makes it easier to understand and modify code
+2. **Enhanced Error Handling**: Standardized error responses improve developer experience
+3. **Better Type Safety**: Comprehensive TypeScript typing throughout the codebase
+4. **Simplified Testing**: Isolated components can be tested independently
+5. **Cleaner API Design**: Consistent API design with well-defined interfaces
+6. **Smaller Surface Area**: Each component has a single responsibility
+
+### Migrating from the Old Architecture
+
+The refactoring maintains backward compatibility with the existing API endpoints. Clients using the Authentication Service should continue to work without modifications. The internal implementation has been completely rewritten for better maintainability and scalability.
+
+### Frontend Error Handling
+
+Frontend applications should be updated to handle the new error response format. In particular:
+
+1. Extract the error message from `response.error.message` instead of directly using the response object
+2. Use the error code in `response.error.code` for programmatic handling of specific error conditions
+3. Display helpful information from `response.error.help` when available
+
+Example frontend error handling:
+
+```typescript
+try {
+  const result = await api.post('/api/auth/signup', userData);
+  // Handle success
+} catch (error) {
+  if (error.response?.data?.error) {
+    // Extract standardized error information
+    const { code, message } = error.response.data.error;
+    
+    // Display user-friendly message
+    displayError(message);
+    
+    // Handle specific error cases
+    if (code === 'EMAIL_EXISTS') {
+      // Show login link or password recovery options
+    }
+  } else {
+    // Handle unexpected errors
+    displayError('An unexpected error occurred');
+  }
+}
+```
+
+This approach prevents the React Error #31 that occurs when trying to directly render error objects in the UI.
