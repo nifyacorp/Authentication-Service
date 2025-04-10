@@ -5,7 +5,9 @@ export interface User {
   id: string;
   email: string;
   password_hash?: string;
-  name: string;
+  first_name?: string;
+  last_name?: string;
+  name?: string; // Virtual property for backward compatibility
   created_at: Date;
   updated_at: Date;
   email_verified: boolean;

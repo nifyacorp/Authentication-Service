@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
-import { userRepository } from '../models/user.repository';
-import { AUTH_ERRORS } from '../errors/factory';
+import { userRepository } from '../models/user.repository.js';
+import { AUTH_ERRORS } from '../errors/factory.js';
 import { 
   generateAccessToken, 
   generateRefreshToken, 
@@ -9,8 +9,8 @@ import {
   getJwtExpirationSeconds,
   JWT_EXPIRES_IN,
   REFRESH_TOKEN_EXPIRES_IN
-} from '../../utils/jwt';
-import { User, LoginResponse, UserProfile } from '../models/types';
+} from '../../utils/jwt.js';
+import { User, LoginResponse, UserProfile } from '../models/types.js';
 
 // Number of rounds for bcrypt salt generation
 const SALT_ROUNDS = 10;
@@ -64,6 +64,14 @@ export const authService = {
       userName
     );
     
+    // Sync user to backend
+    try {
+      await this.syncUserToBackend(user.id, user.email);
+    } catch (error) {
+      console.error('Failed to sync user to backend:', error instanceof Error ? error.message : 'Unknown error');
+      // Don't fail user creation if sync fails
+    }
+    
     // Return success response
     return {
       message: 'User created successfully',
@@ -74,6 +82,75 @@ export const authService = {
         email_verified: user.email_verified
       }
     };
+  },
+  
+  /**
+   * Sync user to backend service
+   */
+  async syncUserToBackend(userId: string, email: string): Promise<boolean> {
+    try {
+      console.log(`Syncing user ${userId} to backend service`);
+      
+      // Get backend URL from environment or use default
+      const backendUrl = process.env.BACKEND_API_URL || 'https://backend-415554190254.us-central1.run.app';
+      
+      // Try to get API key from environment first
+      let apiKey = process.env.BACKEND_API_KEY;
+      
+      // If not in env, try to get it from Secret Manager
+      if (!apiKey) {
+        try {
+          // Check if we have access to Secret Manager and the secret exists
+          const { SecretManagerServiceClient } = await import('@google-cloud/secret-manager');
+          const secretClient = new SecretManagerServiceClient();
+          
+          // Format of the secret name
+          const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'delta-entity-447812-p2';
+          const secretName = `projects/${projectId}/secrets/SYNC_USERS_API_KEY/versions/latest`;
+          
+          console.log(`Attempting to fetch API key from Secret Manager: ${secretName}`);
+          
+          const [version] = await secretClient.accessSecretVersion({ name: secretName });
+          if (version && version.payload && version.payload.data) {
+            apiKey = version.payload.data.toString();
+            console.log('Successfully retrieved API key from Secret Manager');
+          } else {
+            console.warn('Retrieved secret version has no payload or data');
+          }
+        } catch (secretError) {
+          console.error('Failed to get SYNC_USERS_API_KEY from Secret Manager:', 
+            secretError instanceof Error ? secretError.message : 'Unknown error');
+        }
+      }
+      
+      if (!apiKey) {
+        console.warn('No API key available for backend sync. Neither BACKEND_API_KEY environment variable nor SYNC_USERS_API_KEY in Secret Manager is set.');
+      }
+      
+      // Make API call to backend sync endpoint
+      const response = await fetch(`${backendUrl}/api/v1/users/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey || '',
+        },
+        body: JSON.stringify({
+          userId,
+          email
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend sync failed with status ${response.status}: ${errorText}`);
+      }
+      
+      console.log(`User ${userId} successfully synced to backend`);
+      return true;
+    } catch (error) {
+      console.error('User sync error:', error instanceof Error ? error.message : 'Unknown error');
+      throw error;
+    }
   },
   
   /**
