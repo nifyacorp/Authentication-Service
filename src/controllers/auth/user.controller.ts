@@ -102,7 +102,7 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response, next
 export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, next: NextFunction) => {
   try {
     console.log('Processing signup request');
-    const { email, password, name } = req.body;
+    const { email, password, name = '' } = req.body;
 
     try {
       signupSchema.parse({ email, password, name });
@@ -131,7 +131,7 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, ne
     const user = await queries.createUser(
       email,
       hashedPassword,
-      name
+      name || ''
     );
 
     console.log('User created successfully:', user.id);
