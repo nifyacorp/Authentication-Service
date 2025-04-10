@@ -3,20 +3,22 @@ import type { QueryResult, QueryResultRow } from 'pg';
 
 // Debug function to log query execution
 async function executeQuery<T extends QueryResultRow>(query: string, params: any[] = []): Promise<QueryResult<T>> {
-  console.log('Executing query:', {
-    text: query,
-    params: params.map(p => p === null ? 'null' : String(p))
-  });
+  const pool = getPool();
+  // Log the query and parameters before execution for debugging
+  console.debug(`Executing query: { \n  text: ${JSON.stringify(query)}, \n  params: ${JSON.stringify(params)} \n}`);
   try {
-    const result = await getPool().query(query, params);
-    console.log('Query result:', {
-      rowCount: result.rowCount,
-      firstRow: result.rows[0] ? '(data)' : null
-    });
+    const result = await pool.query<T>(query, params);
+    // Log query success (optional, might be verbose)
+    console.debug(`Query result: { rowCount: ${result.rowCount}, firstRow: ${result.rows[0] ? '(data)' : 'null'} }`);
     return result;
   } catch (error) {
-    console.error('Query error:', error);
-    throw error;
+    // Log query errors
+    console.error(`Query error: ${error instanceof Error ? error.message : String(error)}`, {
+      query: JSON.stringify(query),
+      params: JSON.stringify(params),
+      errorDetails: error // Log the full error object for more details if needed
+    });
+    throw error; // Re-throw the error to be handled by the caller
   }
 }
 

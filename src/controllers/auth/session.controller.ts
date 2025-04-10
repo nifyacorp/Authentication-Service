@@ -167,31 +167,55 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
       console.log('New tokens generated successfully');
       
       // Revoke the old refresh token
-      console.log(`Attempting to revoke old refresh token for user: ${user.id}. Token prefix: ${refreshToken.substring(0, 10)}...`);
+      const oldTokenPrefix = refreshToken.substring(0, 10);
+      console.log(`Attempting to revoke old refresh token for user: ${user.id}. Token prefix: ${oldTokenPrefix}...`);
       try {
         await queries.revokeRefreshToken(refreshToken);
-        console.log(`Successfully revoked old refresh token for user: ${user.id}.`);
+        console.log(`Successfully revoked old refresh token for user: ${user.id} (Prefix: ${oldTokenPrefix}).`);
       } catch (revokeError) {
-        console.error(`Error explicitly revoking old refresh token for user ${user.id}:`, revokeError);
-        // Decide if we should proceed or error out. For now, we log and continue, 
-        // but this might leave the old token active if revocation fails.
+        console.error(`Error explicitly revoking old refresh token (Prefix: ${oldTokenPrefix}) for user ${user.id}:`, revokeError);
+        // Log and continue, as the create operation might handle duplicates or the token might already be invalid.
       }
 
       // Store the new refresh token
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
-      console.log(`Attempting to store new refresh token for user: ${user.id}. Expiry: ${expiresAt.toISOString()}. Token prefix: ${newRefreshToken.substring(0, 10)}...`);
+      expiresAt.setDate(expiresAt.getDate() + 7);
+      const newTokenPrefix = newRefreshToken.substring(0, 10);
+      console.log(`Attempting to store new refresh token for user: ${user.id}. Expiry: ${expiresAt.toISOString()}. Token prefix: ${newTokenPrefix}...`);
       try {
         await queries.createRefreshToken(user.id, newRefreshToken, expiresAt);
-        console.log(`Successfully stored new refresh token for user: ${user.id}.`);
-      } catch (createError) {
-        console.error(`Critical error storing new refresh token for user ${user.id}:`, createError);
-        console.log('Error type:', createError instanceof Error ? createError.constructor.name : typeof createError);
-        console.log('Error message:', createError instanceof Error ? createError.message : String(createError));
-        // If creating the new token fails, we cannot proceed.
-        console.groupEnd();
-        // Throw a specific error or call next with a server error
-        return next(errorBuilders.serverError(req, new Error('Failed to store new refresh token after generating it.')));
+        console.log(`Successfully stored new refresh token for user: ${user.id} (Prefix: ${newTokenPrefix}).`);
+      } catch (createError: any) {
+        // Check if it's a unique constraint violation (code 23505 for PostgreSQL)
+        if (createError?.code === '23505') {
+          console.warn(`Caught unique constraint violation (23505) when storing refresh token (Prefix: ${newTokenPrefix}) for user ${user.id}.`);
+          // Verify if the conflicting token actually exists and belongs to this user.
+          // This might happen due to rapid/concurrent refresh requests generating the same token (if iat is the same second).
+          try {
+            const existingToken = await queries.getRefreshToken(newRefreshToken);
+            if (existingToken && existingToken.user_id === user.id && !existingToken.revoked) {
+              // Token exists, belongs to the user, and is not revoked. Assume concurrent refresh succeeded or this is a retry.
+              console.log(`Confirmed existing token (Prefix: ${newTokenPrefix}) belongs to user ${user.id} and is valid. Proceeding.`);
+              // Proceed as if creation was successful, the required token exists.
+            } else {
+              // Token exists but is revoked, belongs to another user, or getRefreshToken failed.
+              console.error(`Conflicting token (Prefix: ${newTokenPrefix}) check failed. Existing token:`, existingToken);
+              console.groupEnd();
+              return next(errorBuilders.serverError(req, new Error('Failed to store new refresh token due to conflict.')));
+            }
+          } catch (verificationError) {
+            console.error(`Error verifying conflicting token (Prefix: ${newTokenPrefix}) for user ${user.id}:`, verificationError);
+            console.groupEnd();
+            return next(errorBuilders.serverError(req, new Error('Error verifying potentially duplicate refresh token.')));
+          }
+        } else {
+          // It's a different error, handle as critical
+          console.error(`Critical error storing new refresh token (Prefix: ${newTokenPrefix}) for user ${user.id}:`, createError);
+          console.log('Error type:', createError instanceof Error ? createError.constructor.name : typeof createError);
+          console.log('Error message:', createError instanceof Error ? createError.message : String(createError));
+          console.groupEnd();
+          return next(errorBuilders.serverError(req, new Error('Failed to store new refresh token after generating it.')));
+        }
       }
       
       console.log(`Tokens refreshed successfully for user: ${user.id}`);
