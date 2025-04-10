@@ -119,104 +119,115 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Debug endpoints for development only
-if (process.env.NODE_ENV === 'development' || process.env.ENABLE_DEBUG_ENDPOINTS === 'true') {
-  authRouter.get('/debug/tokens', async (req: Request, res: Response) => {
-    try {
-      const userId = req.query.userId as string || 'test-user-123';
-      const email = req.query.email as string || 'test@example.com';
-      const name = req.query.name as string || 'Test User';
-      const emailVerified = req.query.emailVerified === 'true';
-      
-      const accessToken = await generateAccessToken(userId, email, name, emailVerified);
-      const refreshToken = await generateRefreshToken(userId, email);
-      
-      res.json({
-        accessToken,
-        refreshToken,
-        decodedAccess: JSON.parse(
-          Buffer.from(accessToken.split('.')[1], 'base64').toString()
-        ),
-        decodedRefresh: JSON.parse(
-          Buffer.from(refreshToken.split('.')[1], 'base64').toString()
-        )
-      });
-    } catch (error) {
-      console.error('Debug tokens error:', error);
-      res.status(500).json({ error: 'Failed to generate debug tokens' });
-    }
-  });
+authRouter.get('/debug/tokens', async (req: Request, res: Response) => {
+  try {
+    const userId = req.query.userId as string || 'test-user-123';
+    const email = req.query.email as string || 'test@example.com';
+    const name = req.query.name as string || 'Test User';
+    const emailVerified = req.query.emailVerified === 'true';
+    
+    const accessToken = await generateAccessToken(userId, email, name, emailVerified);
+    const refreshToken = await generateRefreshToken(userId, email);
+    
+    res.json({
+      accessToken,
+      refreshToken,
+      decodedAccess: JSON.parse(
+        Buffer.from(accessToken.split('.')[1], 'base64').toString()
+      ),
+      decodedRefresh: JSON.parse(
+        Buffer.from(refreshToken.split('.')[1], 'base64').toString()
+      )
+    });
+  } catch (error) {
+    console.error('Debug tokens error:', error);
+    res.status(500).json({ error: 'Failed to generate debug tokens' });
+  }
+});
 
-  // Diagnostic endpoint to validate tokens and check authentication
-  authRouter.post('/debug/validate-token', async (req: Request, res: Response) => {
-    try {
-      const { token } = req.body;
-      
-      if (!token) {
-        return res.status(400).json({ 
-          error: 'Token is required',
-          status: 'error'
-        });
-      }
-
-      // Decode token without verification first to inspect structure
-      const decoded = jwt.decode(token, { complete: true });
-      
-      // Verify token with our secret
-      const secret = await getJwtSecret();
-      let verifiedToken;
-      
-      try {
-        verifiedToken = jwt.verify(token, secret);
-      } catch (verifyError) {
-        return res.status(401).json({
-          error: 'Token verification failed',
-          details: verifyError.message,
-          status: 'error',
-          decodedToken: decoded
-        });
-      }
-
-      // Test requests to the backend service
-      const backendUrl = process.env.BACKEND_URL || 'https://backend-415554190254.us-central1.run.app';
-      
-      // Prepare headers as they should be sent to the backend
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'x-user-id': verifiedToken.sub,
-        'Content-Type': 'application/json'
-      };
-
-      // Log diagnostic information
-      console.log('🔍 Debug validate-token request:', {
-        tokenLength: token.length,
-        tokenPreview: `${token.substring(0, 15)}...${token.substring(token.length - 15)}`,
-        decodedSub: verifiedToken.sub,
-        headers
-      });
-
-      return res.json({
-        status: 'success',
-        message: 'Token is valid',
-        userId: verifiedToken.sub,
-        decodedToken: verifiedToken,
-        correctHeaders: {
-          'Authorization': `Bearer ${token}`,
-          'x-user-id': verifiedToken.sub
-        },
-        tokenStructure: decoded,
-        expiresAt: new Date(verifiedToken.exp * 1000).toISOString(),
-        issuedAt: new Date(verifiedToken.iat * 1000).toISOString()
-      });
-    } catch (error) {
-      console.error('Debug validate-token error:', error);
-      return res.status(500).json({ 
-        error: 'Error validating token', 
-        details: error.message,
+// Diagnostic endpoint to validate tokens and check authentication
+authRouter.post('/debug/validate-token', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ 
+        error: 'Token is required',
         status: 'error'
       });
     }
-  });
-}
+
+    // Decode token without verification first to inspect structure
+    const decoded = jwt.decode(token, { complete: true });
+    
+    // Verify token with our secret
+    const secret = await getJwtSecret();
+    let verifiedToken: string | jwt.JwtPayload;
+    
+    try {
+      verifiedToken = jwt.verify(token, secret);
+    } catch (verifyError) {
+      // Ensure verifyError is an instance of Error before accessing message
+      const errorMessage = verifyError instanceof Error ? verifyError.message : 'Unknown verification error';
+      return res.status(401).json({
+        error: 'Token verification failed',
+        details: errorMessage,
+        status: 'error',
+        decodedToken: decoded
+      });
+    }
+    
+    // Type guard to ensure verifiedToken is JwtPayload before accessing properties
+    if (typeof verifiedToken === 'string' || !verifiedToken.sub) {
+      return res.status(401).json({
+        error: 'Invalid token structure after verification',
+        status: 'error',
+        decodedToken: decoded
+      });
+    }
+
+    // Test requests to the backend service
+    const backendUrl = process.env.BACKEND_URL || 'https://backend-415554190254.us-central1.run.app';
+    
+    // Prepare headers as they should be sent to the backend
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'x-user-id': verifiedToken.sub,
+      'Content-Type': 'application/json'
+    };
+
+    // Log diagnostic information
+    console.log('🔍 Debug validate-token request:', {
+      tokenLength: token.length,
+      tokenPreview: `${token.substring(0, 15)}...${token.substring(token.length - 15)}`,
+      decodedSub: verifiedToken.sub,
+      headers
+    });
+
+    return res.json({
+      status: 'success',
+      message: 'Token is valid',
+      userId: verifiedToken.sub,
+      decodedToken: verifiedToken,
+      correctHeaders: {
+        'Authorization': `Bearer ${token}`,
+        'x-user-id': verifiedToken.sub
+      },
+      tokenStructure: decoded,
+      expiresAt: new Date((verifiedToken.exp ?? 0) * 1000).toISOString(),
+      issuedAt: new Date((verifiedToken.iat ?? 0) * 1000).toISOString()
+    });
+  } catch (error) {
+    console.error('Debug validate-token error:', error);
+    // Ensure error is an instance of Error before accessing message
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ 
+      error: 'Error validating token', 
+      details: errorMessage,
+      status: 'error'
+    });
+  }
+});
 
 // v1 API namespace - add missing endpoints
 // Create a v1 sub-router

@@ -75,23 +75,28 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
     console.group('📝 Auth Service - Processing refresh token request');
     console.log('Request IP:', req.ip);
     
+    // Get request ID from headers using req.get for type safety
+    const requestId = req.get('x-request-id') || req.get('X-Request-ID') || 'unknown-request-id';
+    
     // Return a clear error that refresh tokens are temporarily disabled
-    const error = {
+    const errorResponse = {
       code: 'REFRESH_TOKENS_DISABLED',
       message: 'Refresh tokens are temporarily disabled. Please log in again with your credentials.',
       timestamp: new Date().toISOString(),
-      request_id: req.id
+      request_id: requestId // Use the extracted/generated request ID
     };
     
     console.log('Refresh tokens are temporarily disabled');
     console.groupEnd();
     
     // Return a 501 Not Implemented status to make it clear this is a deliberate choice
-    return res.status(501).json({ error });
+    return res.status(501).json({ error: errorResponse });
   } catch (error) {
     console.error('Unhandled error in refreshToken endpoint:', error);
     console.groupEnd();
-    return next(errorBuilders.serverError(req, 'Internal server error processing refresh token'));
+    // Ensure the error passed to the builder is an Error instance
+    const errorInstance = error instanceof Error ? error : new Error('Internal server error processing refresh token');
+    return next(errorBuilders.serverError(req, errorInstance));
   }
 };
 

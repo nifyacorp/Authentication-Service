@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret, MAX_LOGIN_ATTEMPTS, LOCK_TIME } from '../../config/jwt.js';
 import { signupSchema, loginSchema } from '../../utils/validation.js';
-import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
+import { generateAccessToken } from '../../utils/jwt.js';
 import { z } from 'zod';
 import { queries } from '../../models/index.js';
 import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
@@ -63,18 +63,11 @@ export const login = async (req, res, next) => {
         if (user.login_attempts > 0) {
             await queries.updateLoginAttempts(user.id, 0, undefined);
         }
-        const [accessToken, refreshToken] = await Promise.all([
-            generateAccessToken(user.id, user.email, user.name, user.email_verified),
-            generateRefreshToken(user.id, user.email)
-        ]);
-        // Store refresh token
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
-        await queries.createRefreshToken(user.id, refreshToken, expiresAt);
+        // Only generate access token - no refresh token
+        const accessToken = await generateAccessToken(user.id, user.email, user.name, user.email_verified);
         console.log(`Successful login for user: ${user.id}`);
         res.json({
             accessToken,
-            refreshToken,
             user: {
                 id: user.id,
                 email: user.email,

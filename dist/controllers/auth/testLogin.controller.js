@@ -1,4 +1,4 @@
-import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
+import { generateAccessToken } from '../../utils/jwt.js';
 export const testLogin = async (req, res, next) => {
     try {
         console.log('Checking for test account login');
@@ -8,14 +8,10 @@ export const testLogin = async (req, res, next) => {
             console.log('Test account login detected - providing direct access');
             // Generate tokens for test account
             const testUserId = '1';
-            const [accessToken, refreshToken] = await Promise.all([
-                generateAccessToken(testUserId, email, 'NIFYA Test User', true),
-                generateRefreshToken(testUserId, email)
-            ]);
+            const accessToken = await generateAccessToken(testUserId, email, 'NIFYA Test User', true);
             // Return success response for test account
             return res.json({
                 accessToken,
-                refreshToken,
                 user: {
                     id: testUserId,
                     email: email,
