@@ -75,177 +75,23 @@ export const refreshToken = async (req: AuthRequest<any, any, RefreshTokenBody>,
     console.group('📝 Auth Service - Processing refresh token request');
     console.log('Request IP:', req.ip);
     
-    const { refreshToken } = req.body;
+    // Return a clear error that refresh tokens are temporarily disabled
+    const error = {
+      code: 'REFRESH_TOKENS_DISABLED',
+      message: 'Refresh tokens are temporarily disabled. Please log in again with your credentials.',
+      timestamp: new Date().toISOString(),
+      request_id: req.id
+    };
     
-    console.log('Refresh token provided:', !!refreshToken);
-    
-    if (!refreshToken) {
-      console.log('Missing refresh token');
-      console.groupEnd();
-      return next(errorBuilders.badRequest(req, 'Refresh token is required'));
-    }
-    
-    // Basic token format validation
-    const isValidFormat = typeof refreshToken === 'string' && !!refreshToken.match(/^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_.+/=]*$/);
-    console.log('Token format validation:', isValidFormat ? 'Valid JWT format' : 'Invalid format');
-    
-    if (!isValidFormat) {
-      console.log('Invalid refresh token format:', refreshToken.substring(0, 10) + '...');
-      console.groupEnd();
-      return next(errorBuilders.badRequest(req, 'Invalid refresh token format'));
-    }
-    
-    try {
-      const secret = await getJwtSecret();
-      console.log('JWT secret retrieved successfully');
-      
-      // Verify the refresh token's JWT format and type
-      console.log('Attempting to verify token...');
-      const decoded = jwt.verify(refreshToken, secret) as { sub: string, type: string, email: string };
-      console.log('Token verified successfully');
-      console.log('Token claims:', {
-        userId: decoded.sub,
-        tokenType: decoded.type,
-        email: decoded.email
-      });
-      
-      if (decoded.type !== 'refresh') {
-        console.log('Invalid token type for refresh:', decoded.type);
-        console.groupEnd();
-        return next(errorBuilders.badRequest(req, 'Invalid token type, expected refresh token'));
-      }
-      
-      // Check if the refresh token exists and is valid in the database
-      console.log('Checking token in database...');
-      const storedToken = await queries.getRefreshToken(refreshToken);
-      console.log('Token found in database:', !!storedToken);
-      
-      if (!storedToken) {
-        console.log('Refresh token not found or revoked');
-        console.groupEnd();
-        return next(errorBuilders.unauthorized(req, 'Invalid or expired refresh token'));
-      }
-      
-      // Check if the token has expired
-      const now = new Date();
-      const expiry = new Date(storedToken.expires_at);
-      const isExpired = now > expiry;
-      console.log('Token expiration check:', {
-        now: now.toISOString(),
-        expiry: expiry.toISOString(),
-        isExpired,
-        timeLeft: isExpired ? 'Expired' : `${Math.floor((expiry.getTime() - now.getTime()) / 1000)} seconds`
-      });
-      
-      if (isExpired) {
-        console.log('Refresh token has expired');
-        await queries.revokeRefreshToken(refreshToken);
-        console.log('Expired token revoked in database');
-        console.groupEnd();
-        return next(errorBuilders.unauthorized(req, 'Refresh token has expired'));
-      }
-      
-      // Get the user
-      console.log('Looking up user:', decoded.sub);
-      const user = await queries.getUserById(decoded.sub);
-      console.log('User found:', !!user);
-      
-      if (!user) {
-        console.log('User not found for refresh token:', decoded.sub);
-        await queries.revokeRefreshToken(refreshToken);
-        console.log('Token revoked due to missing user');
-        console.groupEnd();
-        return next(errorBuilders.unauthorized(req, 'User not found'));
-      }
-      
-      // Generate new tokens with required claims
-      console.log('Generating new tokens for user:', user.id);
-      const [newAccessToken, newRefreshToken] = await Promise.all([
-        generateAccessToken(user.id, user.email, user.name, user.email_verified),
-        generateRefreshToken(user.id, user.email)
-      ]);
-      console.log('New tokens generated successfully');
-      
-      // Revoke the old refresh token
-      const oldTokenPrefix = refreshToken.substring(0, 10);
-      console.log(`Attempting to revoke old refresh token for user: ${user.id}. Token prefix: ${oldTokenPrefix}...`);
-      try {
-        await queries.revokeRefreshToken(refreshToken);
-        console.log(`Successfully revoked old refresh token for user: ${user.id} (Prefix: ${oldTokenPrefix}).`);
-      } catch (revokeError) {
-        console.error(`Error explicitly revoking old refresh token (Prefix: ${oldTokenPrefix}) for user ${user.id}:`, revokeError);
-        // Log and continue, as the create operation might handle duplicates or the token might already be invalid.
-      }
-
-      // Store the new refresh token
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
-      console.log(`Attempting to store new refresh token for user: ${user.id}. Expiry: ${expiresAt.toISOString()}. Token prefix: ${newRefreshToken.substring(0, 10)}...`);
-      
-      try {
-        await queries.createRefreshToken(user.id, newRefreshToken, expiresAt);
-        console.log(`Successfully stored new refresh token for user: ${user.id}.`);
-      } catch (createError) {
-        // Check if error is a PostgreSQL unique constraint violation
-        if (createError && typeof createError === 'object' && 'code' in createError && createError.code === '23505') {
-          console.warn(`Unique constraint violation detected for token. This likely means a concurrent refresh operation is in progress.`);
-          
-          // Check if the token already exists for this user
-          try {
-            const existingToken = await queries.getRefreshToken(newRefreshToken);
-            
-            if (existingToken && existingToken.user_id === user.id && !existingToken.revoked) {
-              console.log(`Found existing valid token for user ${user.id} - reusing this token`);
-              // Valid token exists, we can proceed with the response
-            } else {
-              console.error(`Found conflicting token but it is invalid or belongs to different user.`);
-              console.groupEnd();
-              return next(errorBuilders.serverError(req, new Error('Token conflict during refresh operation.')));
-            }
-          } catch (tokenLookupError) {
-            console.error(`Error checking for existing token:`, tokenLookupError);
-            console.groupEnd();
-            return next(errorBuilders.serverError(req, new Error('Failed to validate token state during refresh.')));
-          }
-        } else {
-          console.error(`Critical error storing new refresh token for user ${user.id}:`, createError);
-          console.log('Error type:', createError instanceof Error ? createError.constructor.name : typeof createError);
-          console.log('Error message:', createError instanceof Error ? createError.message : String(createError));
-          // If creating the new token fails, we cannot proceed.
-          console.groupEnd();
-          // Throw a specific error or call next with a server error
-          return next(errorBuilders.serverError(req, new Error('Failed to store new refresh token after generating it.')));
-        }
-      }
-      
-      console.log(`Tokens refreshed successfully for user: ${user.id}`);
-      console.groupEnd();
-      
-      res.json({
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-        expiresIn: 900, // 15 minutes in seconds, to help clients know when to refresh
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          email_verified: user.email_verified
-        }
-      });
-    } catch (jwtError) {
-      console.log('JWT verification failed:', jwtError);
-      console.log('Error type:', jwtError instanceof Error ? jwtError.constructor.name : typeof jwtError);
-      console.log('Error message:', jwtError instanceof Error ? jwtError.message : String(jwtError));
-      console.groupEnd();
-      return next(errorBuilders.unauthorized(req, 'Invalid refresh token'));
-    }
-    
-  } catch (error) {
-    console.error('Refresh token error:', error);
-    console.log('Error type:', error instanceof Error ? error.constructor.name : typeof error);
-    console.log('Error message:', error instanceof Error ? error.message : String(error));
+    console.log('Refresh tokens are temporarily disabled');
     console.groupEnd();
-    return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
+    
+    // Return a 501 Not Implemented status to make it clear this is a deliberate choice
+    return res.status(501).json({ error });
+  } catch (error) {
+    console.error('Unhandled error in refreshToken endpoint:', error);
+    console.groupEnd();
+    return next(errorBuilders.serverError(req, 'Internal server error processing refresh token'));
   }
 };
 

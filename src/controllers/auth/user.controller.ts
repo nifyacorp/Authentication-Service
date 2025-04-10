@@ -79,21 +79,13 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response, next
       await queries.updateLoginAttempts(user.id, 0, undefined);
     }
 
-    const [accessToken, refreshToken] = await Promise.all([
-      generateAccessToken(user.id, user.email, user.name, user.email_verified),
-      generateRefreshToken(user.id, user.email)
-    ]);
-    
-    // Store refresh token
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
-    await queries.createRefreshToken(user.id, refreshToken, expiresAt);
+    // Only generate access token - no refresh token
+    const accessToken = await generateAccessToken(user.id, user.email, user.name, user.email_verified);
     
     console.log(`Successful login for user: ${user.id}`);
     
     res.json({
       accessToken,
-      refreshToken,
       user: {
         id: user.id,
         email: user.email,

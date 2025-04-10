@@ -13,15 +13,11 @@ export const testLogin = async (req: Request<{}, {}, LoginBody>, res: Response, 
       
       // Generate tokens for test account
       const testUserId = '1';
-      const [accessToken, refreshToken] = await Promise.all([
-        generateAccessToken(testUserId, email, 'NIFYA Test User', true),
-        generateRefreshToken(testUserId, email)
-      ]);
+      const accessToken = await generateAccessToken(testUserId, email, 'NIFYA Test User', true);
       
       // Return success response for test account
       return res.json({
         accessToken,
-        refreshToken,
         user: {
           id: testUserId,
           email: email,
