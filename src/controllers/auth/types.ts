@@ -23,7 +23,7 @@ export interface ResetPasswordBody {
 export interface SignupBody {
   email: string;
   password: string;
-  name: string;
+  name?: string;
 }
 
 export interface RefreshTokenBody {

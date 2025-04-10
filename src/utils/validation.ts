@@ -8,7 +8,7 @@ export const signupSchema = z.object({
   name: z.string()
     .min(2, 'Name must be at least 2 characters')
     .max(50, 'Name must not exceed 50 characters')
-    .regex(/^[A-Za-z\s]+$/, 'Name must contain only letters and spaces')
+    .regex(/^[A-Za-z0-9._\s]+$/, 'Name can only contain letters, numbers, dots, underscores, and spaces')
     .optional()
     .default('')
 });

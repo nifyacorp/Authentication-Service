@@ -6,13 +6,19 @@ This service provides a complete authentication system with various endpoints fo
 
 The Authentication Service has received significant enhancements for improved reliability, security, and interoperability:
 
-### Rate Limiting Protection (New)
+### Simplified User Registration (New)
+- **Streamlined Signup Process**: Email and password only required for signup
+- **Simplified Password Requirements**: Minimum 6 characters with at least one number
+- **Optional Name Field**: Name field is now optional during registration
+- **Improved User Experience**: Faster signup process with fewer fields
+
+### Rate Limiting Protection
 - **Enhanced Security**: Advanced rate limiting to protect against brute force attacks
 - **Tiered Approach**: Stricter limits (10 reqs/15min) on sensitive endpoints like login and signup
 - **General Protection**: Standard rate limits (100 reqs/5min) on all API routes
 - **Smart Response Handling**: Rate limit responses include helpful retry information
 
-### OAuth2 Improvements (New)
+### OAuth2 Improvements
 - **Robust Error Handling**: Better error detection and validation for Google OAuth flows
 - **Parameter Validation**: Strict validation of all OAuth callback parameters
 - **Security Enhancement**: Improved state token validation for CSRF protection
@@ -24,7 +30,7 @@ The Authentication Service has received significant enhancements for improved re
 - **Type-Safety**: Improved TypeScript typing for better development experience
 - **Client Experience**: Enhanced error messages make debugging and integration easier
 
-### Session Management Enhancements (New)
+### Session Management Enhancements
 - **Improved Logout Flow**: Enhanced token validation during logout
 - **Better Token Refresh**: More robust refresh token validation and error handling
 - **User-Friendly Responses**: Improved responses with additional useful metadata
@@ -42,6 +48,7 @@ These updates make the Authentication Service more robust, secure, and developer
 - Database-backed token storage
 - Row Level Security (RLS) for data protection
 - Self-documenting API with standardized error responses
+- User synchronization between authentication and main databases
 
 ## Integration with NIFYA Ecosystem
 
@@ -77,6 +84,95 @@ The Authentication Service is a critical component of the NIFYA platform, provid
 └─────────────┘
 ```
 
+## System Processes
+
+### User Authentication Process
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant AuthService
+    participant Database
+    participant Backend
+
+    User->>Frontend: Enter credentials
+    Frontend->>AuthService: POST /api/auth/login
+    AuthService->>Database: Verify credentials
+    Database-->>AuthService: Validation result
+    
+    alt Invalid Credentials
+        AuthService-->>Frontend: 401 Unauthorized
+        Frontend-->>User: Show error message
+    else Valid Credentials
+        AuthService->>Database: Update last login
+        AuthService->>AuthService: Generate JWT tokens
+        AuthService-->>Frontend: Return tokens & user info
+        Frontend->>Frontend: Store tokens
+        Frontend-->>User: Redirect to Dashboard
+        
+        Frontend->>Backend: API requests with token
+        Backend->>AuthService: Validate token (if needed)
+        AuthService-->>Backend: Token validation result
+        Backend-->>Frontend: Protected resources
+    end
+```
+
+### User Registration Process
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant AuthService
+    participant AuthDB
+    participant BackendDB
+    participant PubSub
+
+    User->>Frontend: Submit signup form (email, password)
+    Frontend->>AuthService: POST /api/auth/signup
+    
+    AuthService->>AuthService: Validate input
+    AuthService->>AuthDB: Check if email exists
+    
+    alt Email Already Exists
+        AuthDB-->>AuthService: User exists
+        AuthService-->>Frontend: 400 Bad Request
+        Frontend-->>User: Show error message
+    else Email Available
+        AuthService->>AuthService: Hash password
+        AuthService->>AuthDB: Create user
+        AuthDB-->>AuthService: User created
+        
+        AuthService->>PubSub: Publish user_created event
+        PubSub->>BackendDB: Sync user to main database
+        
+        AuthService-->>Frontend: 201 Created
+        Frontend-->>User: Show success message
+    end
+```
+
+### Database Synchronization Process
+
+```mermaid
+flowchart TD
+    A[User Created in Auth DB] --> B{Trigger user_sync function}
+    B --> C[Publish to PubSub]
+    C --> D[Backend Service receives event]
+    D --> E{User exists in Backend DB?}
+    
+    E -->|Yes| F[Update user in Backend DB]
+    E -->|No| G[Create user in Backend DB]
+    
+    F --> H[Maintain identical User ID]
+    G --> H
+    
+    H --> I[Sync complete]
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style I fill:#bbf,stroke:#333,stroke-width:2px
+```
+
 ## Status Icons
 - ✅ Implemented and Working
 - ⚠️ Partially Implemented
@@ -93,13 +189,13 @@ The Authentication Service is a critical component of the NIFYA platform, provid
   {
     "email": "string",
     "password": "string",
-    "name": "string"
+    "name": "string" // Optional
   }
   ```
 - **Returns**: User data and authentication tokens
 - **Features**:
-  - Password validation (min 8 chars, uppercase, number, special char)
-  - Name validation (2-50 chars, letters and spaces only)
+  - Password validation (min 6 chars, at least one number)
+  - Optional name field
   - Email uniqueness check
   - Password hashing with bcrypt
   - Event publishing for user creation
@@ -183,6 +279,141 @@ The Authentication Service is a critical component of the NIFYA platform, provid
   - Complete session termination
   - Audit timestamp
 
+#### `GET /api/auth/session` ✅
+- **Purpose**: Validate current session and get user data
+- **Headers**: `Authorization: Bearer <token>`
+- **Returns**: Session status and user data
+  ```json
+  {
+    "authenticated": true,
+    "user": {
+      "id": "string",
+      "email": "string",
+      "name": "string",
+      "email_verified": boolean
+    },
+    "session": {
+      "issuedAt": "2025-03-26T11:59:37.059Z",
+      "expiresAt": "2025-03-26T12:14:37.059Z",
+      "remainingTime": 900
+    }
+  }
+  ```
+- **Features**:
+  - Token validation
+  - Session expiration details
+  - User data retrieval
+  - Authentication status
+
+### User Management
+
+#### `GET /api/auth/me` ✅
+- **Purpose**: Get current user profile
+- **Headers**: `Authorization: Bearer <token>`
+- **Returns**: User profile data
+  ```json
+  {
+    "id": "string",
+    "email": "string",
+    "name": "string",
+    "createdAt": "2025-03-26T11:59:37.059Z",
+    "emailVerified": boolean,
+    "preferences": {
+      "theme": "light",
+      "language": "en",
+      "notifications": true
+    }
+  }
+  ```
+- **Features**:
+  - Token validation
+  - User profile retrieval
+  - User preferences
+
+#### `POST /api/auth/verify-email` ✅
+- **Purpose**: Verify user email address
+- **Body**: 
+  ```json
+  {
+    "token": "string"
+  }
+  ```
+- **Returns**: Verification status
+  ```json
+  {
+    "message": "Email verified successfully",
+    "email": "string"
+  }
+  ```
+- **Features**:
+  - Token validation
+  - Email verification
+  - User status update
+
+### Password Management
+
+#### `POST /api/auth/forgot-password` ✅
+- **Purpose**: Request password reset
+- **Body**: 
+  ```json
+  {
+    "email": "string"
+  }
+  ```
+- **Returns**: 200 OK with message
+  ```json
+  {
+    "message": "Password reset instructions sent to email if it exists"
+  }
+  ```
+- **Features**:
+  - Email verification
+  - Reset token generation
+  - Email notification
+
+#### `POST /api/auth/reset-password` ✅
+- **Purpose**: Reset password with token
+- **Body**: 
+  ```json
+  {
+    "token": "string",
+    "password": "string"
+  }
+  ```
+- **Returns**: 200 OK with message
+  ```json
+  {
+    "message": "Password reset successfully"
+  }
+  ```
+- **Features**:
+  - Token validation
+  - Password validation
+  - Password update
+  - Session invalidation
+
+#### `POST /api/auth/change-password` ✅
+- **Purpose**: Change password when logged in
+- **Headers**: `Authorization: Bearer <token>`
+- **Body**: 
+  ```json
+  {
+    "currentPassword": "string",
+    "newPassword": "string"
+  }
+  ```
+- **Returns**: 200 OK with message
+  ```json
+  {
+    "message": "Password changed successfully"
+  }
+  ```
+- **Features**:
+  - Current password verification
+  - New password validation
+  - Password update
+  - Session maintenance
+
 ### OAuth Integration
 
 #### `POST /api/auth/google/login` ✅
@@ -226,6 +457,106 @@ The Authentication Service is a critical component of the NIFYA platform, provid
   - Profile data synchronization with Google account
   - Error handling for OAuth flow failures
   - Type validation for all parameters
+
+### Debug and Testing Endpoints
+
+#### `GET /health` ✅
+- **Purpose**: Check API and database health
+- **Returns**: Status OK with detailed service health:
+  ```json
+  {
+    "status": "healthy",
+    "version": "1.0.0",
+    "uptime": "10d 2h 30m",
+    "databaseConnection": "connected",
+    "pubsubConnection": "connected",
+    "memoryUsage": {
+      "rss": "120MB",
+      "heapTotal": "80MB",
+      "heapUsed": "65MB"
+    }
+  }
+  ```
+- **Features**:
+  - Database connectivity check
+  - Service uptime monitoring
+  - Version information
+  - Resource usage statistics
+
+#### `POST /api/auth/google/mock` ✅ (Development Only)
+- **Purpose**: Mock Google OAuth for testing
+- **Body**: 
+  ```json
+  {
+    "email": "string",
+    "name": "string"
+  }
+  ```
+- **Returns**: Access token, refresh token, and user data
+- **Features**:
+  - Test OAuth flow without Google integration
+  - Development convenience
+  - Disabled in production
+
+#### `GET /api/auth/debug/tokens` ✅ (Development Only)
+- **Purpose**: Generate and inspect tokens for testing
+- **Query Parameters**:
+  ```typescript
+  {
+    userId?: string;    // Optional user ID
+    email?: string;     // Optional email
+    name?: string;      // Optional name
+    emailVerified?: boolean; // Optional email verification status
+  }
+  ```
+- **Returns**: Generated tokens with decoded content
+- **Features**:
+  - Test token generation
+  - Token inspection
+  - Development convenience
+  - Disabled in production
+
+#### `POST /api/auth/debug/validate-token` ✅ (Development Only)
+- **Purpose**: Validate and inspect JWT token
+- **Body**: 
+  ```json
+  {
+    "token": "string"
+  }
+  ```
+- **Returns**: Token validation status and decoded content
+- **Features**:
+  - Token inspection
+  - Validation details
+  - Header recommendations
+  - Development convenience
+  - Disabled in production
+
+## Database Schema
+
+The service uses the database schema defined in [auth-db.sql](./supabase/auth-db.sql). Key tables include:
+
+- `users`: User accounts and profiles
+  - Contains user email, password hash, name, and account status
+  - Tracks account verification and active status
+  - Records registration and last login timestamps
+
+- `tokens`: JWT refresh token management
+  - Links refresh tokens to specific users
+  - Tracks token expiration and revocation status
+  - Enables secure token rotation and revocation
+
+The schema includes triggers for user synchronization between the authentication database and the main application database, ensuring that user identities are consistent across the NIFYA platform.
+
+### Database Synchronization
+
+The user synchronization process ensures that:
+1. Users created in the authentication database are automatically synced to the main database
+2. The same user ID is maintained across both databases for the same email
+3. User profile updates are propagated appropriately
+4. Each user has a consistent identity across all NIFYA services
+
+This is implemented via database triggers as defined in the auth-db.sql file. When a user is created or updated in the authentication database, the `trigger_user_sync` function is called, which publishes a message to synchronize the user with the main database.
 
 ## Environment Variables
 
@@ -287,7 +618,7 @@ ACCOUNT_LOCKOUT_DURATION=15                 # Lockout duration in minutes
 - **Event-driven Architecture**: Decoupled processing for security events
 - **Password Security**:
   - Bcrypt hashing with appropriate work factor
-  - Complexity requirements
+  - Complexity requirements (min 6 chars with at least one number)
   - No password storage in plain text
   - Secure password reset mechanism
 - **Token Management**:
@@ -387,53 +718,45 @@ The service includes builders for common error types:
 - `invalidToken` - 400 status code for token issues
 - `invalidLoginMethod` - 401 status code for method mismatches
 
-### Controller Updates
+## Monitoring and Metrics
 
-The following controller files have been updated to use error builders:
+The service exports the following metrics for monitoring:
 
-#### User Controller (`src/controllers/auth/user.controller.ts`)
-- `login`: Enhanced with better error handling for invalid credentials, account lockouts, and validation errors
-- `signup`: Now uses standardized validation errors and improved response for email conflicts
-- `getCurrentUser`: Includes helpful error messages for authentication and user lookup issues
-- `verifyEmail`: Provides better error context for token verification and email status
+- **Authentication Metrics**:
+  - Login success/failure rates
+  - Token refresh rates
+  - Token revocation events
+  - User registration rate
+  
+- **Security Metrics**:
+  - Failed login attempts
+  - Account lockouts
+  - Suspicious activity detection
+  - Rate limit triggers
 
-#### Password Controller (`src/controllers/auth/password.controller.ts`)
-- `forgotPassword`: Enhanced with rate limiting error responses and validation messages
-- `resetPassword`: Improved error handling for token verification and password validation
-- `changePassword`: Better error context for authentication, validation, and password update issues
+- **Performance Metrics**:
+  - Response times for critical endpoints
+  - Database query performance
+  - Token validation speed
+  - Error rates
 
-#### Session Controller (`src/controllers/auth/session.controller.ts`)
-- `logout`: Now provides clear authentication errors and session termination status
-- `refreshToken`: Better error messages for invalid or expired tokens
-- `revokeAllSessions`: Improved error handling for permission and user validation
+## Event Publishing
 
-#### OAuth Controller (`src/controllers/auth/oauth.controller.ts`)
-- `getGoogleAuthUrl`: Enhanced error handling for OAuth configuration
-- `handleGoogleCallback`: Better error messages for OAuth callback validation and token exchange
+The service publishes events to Google Cloud Pub/Sub for:
+- User creation
+- Profile updates
+- Security events
 
-These updates ensure consistent error handling across all authentication endpoints while improving the developer experience with self-documenting errors.
-
-### Technical Implementation
-
-The API resilience implementation uses several TypeScript patterns:
-
-- **Interface-First Design**: All API metadata and error responses follow well-defined interfaces
-- **Error Builder Pattern**: Factory functions create standardized error responses
-- **Middleware Integration**: Error handling is integrated into Express middleware pipeline
-- **Type Guards**: Runtime checking ensures error objects maintain their shape
-- **Contextual Responses**: Errors include the full context of what went wrong and how to fix it
-
-Key files:
-- `ErrorResponseBuilder.ts`: Core error response generation
-- `apiMetadata.ts`: API documentation and metadata
-- `apiDocumenter.ts`: Middleware for request validation
-- `errorHandler.ts`: Global error handling middleware
-
-Stack:
-- TypeScript 4.9+
-- Express.js middleware
-- Zod for validation
-- JWT for authentication
+Event format example:
+```json
+{
+  "id": "user-id",
+  "email": "user@example.com",
+  "name": "User Name",
+  "createdAt": "2025-01-23T23:32:28.266Z",
+  "emailVerified": true
+}
+```
 
 ## Development
 
@@ -496,105 +819,6 @@ gcloud run deploy nifya-auth-service \
   --set-env-vars="JWT_SECRET=SECRET_FROM_SECRET_MANAGER,..."
 ```
 
-### Kubernetes Deployment
-For orchestrated deployment:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: auth-service
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: auth-service
-  template:
-    metadata:
-      labels:
-        app: auth-service
-    spec:
-      containers:
-      - name: auth-service
-        image: gcr.io/PROJECT_ID/nifya-auth-service:latest
-        ports:
-        - containerPort: 3000
-        envFrom:
-        - secretRef:
-            name: auth-service-secrets
-```
-
-## API Health Check
-
-#### `GET /health` ✅
-- **Purpose**: Check API and database health
-- **Returns**: Status OK with detailed service health:
-  ```json
-  {
-    "status": "healthy",
-    "version": "1.0.0",
-    "uptime": "10d 2h 30m",
-    "databaseConnection": "connected",
-    "pubsubConnection": "connected",
-    "memoryUsage": {
-      "rss": "120MB",
-      "heapTotal": "80MB",
-      "heapUsed": "65MB"
-    }
-  }
-  ```
-
-## Monitoring and Metrics
-
-The service exports the following metrics for monitoring:
-
-- **Authentication Metrics**:
-  - Login success/failure rates
-  - Token refresh rates
-  - Token revocation events
-  - User registration rate
-  
-- **Security Metrics**:
-  - Failed login attempts
-  - Account lockouts
-  - Suspicious activity detection
-  - Rate limit triggers
-
-- **Performance Metrics**:
-  - Response times for critical endpoints
-  - Database query performance
-  - Token validation speed
-  - Error rates
-
-## Event Publishing
-
-The service publishes events to Google Cloud Pub/Sub for:
-- User creation
-- Profile updates
-- Security events
-
-Event format example:
-```json
-{
-  "id": "user-id",
-  "email": "user@example.com",
-  "name": "User Name",
-  "createdAt": "2025-01-23T23:32:28.266Z",
-  "emailVerified": true
-}
-```
-
-## Database Schema
-
-The service uses PostgreSQL with the following main tables:
-- `users`: User accounts and profiles
-- `refresh_tokens`: JWT refresh token management
-- `password_reset_requests`: Password recovery
-- `login_attempts`: Tracking failed logins for security
-- `security_events`: Audit log of security-related actions
-
-All tables implement Row Level Security (RLS) for data protection.
-
 ## Troubleshooting
 
 ### Common Issues
@@ -616,14 +840,12 @@ All tables implement Row Level Security (RLS) for data protection.
    - Verify scopes are properly configured
    - Check CORS settings if using browser redirects
 
-## Contributing
-
-Contributions to the Authentication Service are welcome. Please ensure:
-
-1. All tests pass before submitting PR
-2. New features include appropriate tests
-3. Documentation is updated
-4. Code follows established patterns
+4. **User Synchronization Problems**
+   - Verify PubSub topic and subscription are correctly configured
+   - Check database triggers are installed and active
+   - Verify permissions for database synchronization
+   - Check logs for synchronization errors
+   - Verify both databases are accessible
 
 ## License
 

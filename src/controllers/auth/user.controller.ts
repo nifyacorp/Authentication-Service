@@ -104,8 +104,22 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, ne
     console.log('Processing signup request');
     const { email, password, name = '' } = req.body;
 
+    // Extract username from email (part before @)
+    let extractedName = email.split('@')[0];
+    
+    // Sanitize the extracted name to only include allowed characters
+    extractedName = extractedName.replace(/[^A-Za-z0-9._\s]/g, '');
+    
+    // Ensure it's at least 2 characters (minimum required by validation)
+    if (extractedName.length < 2) {
+      extractedName = extractedName.padEnd(2, 'x');
+    }
+    
+    // Use the extracted name if no name is provided
+    const userName = name || extractedName;
+
     try {
-      signupSchema.parse({ email, password, name });
+      signupSchema.parse({ email, password, name: userName });
     } catch (error) {
       if (error instanceof z.ZodError) {
         console.log('Validation failed:', error.errors);
@@ -131,7 +145,7 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, ne
     const user = await queries.createUser(
       email,
       hashedPassword,
-      name || ''
+      userName
     );
 
     console.log('User created successfully:', user.id);
