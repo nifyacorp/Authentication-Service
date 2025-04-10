@@ -15,6 +15,8 @@ import {
   getSession
 } from '../controllers/auth/index.js';
 import { generateAccessToken, generateRefreshToken } from '../utils/jwt.js';
+import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../config/jwt.js';
 
 export const authRouter = Router();
 
@@ -117,7 +119,7 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Debug endpoints for development only
-if (process.env.NODE_ENV === 'development') {
+if (process.env.NODE_ENV === 'development' || process.env.ENABLE_DEBUG_ENDPOINTS === 'true') {
   authRouter.get('/debug/tokens', async (req: Request, res: Response) => {
     try {
       const userId = req.query.userId as string || 'test-user-123';
@@ -141,6 +143,77 @@ if (process.env.NODE_ENV === 'development') {
     } catch (error) {
       console.error('Debug tokens error:', error);
       res.status(500).json({ error: 'Failed to generate debug tokens' });
+    }
+  });
+
+  // Diagnostic endpoint to validate tokens and check authentication
+  authRouter.post('/debug/validate-token', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ 
+          error: 'Token is required',
+          status: 'error'
+        });
+      }
+
+      // Decode token without verification first to inspect structure
+      const decoded = jwt.decode(token, { complete: true });
+      
+      // Verify token with our secret
+      const secret = await getJwtSecret();
+      let verifiedToken;
+      
+      try {
+        verifiedToken = jwt.verify(token, secret);
+      } catch (verifyError) {
+        return res.status(401).json({
+          error: 'Token verification failed',
+          details: verifyError.message,
+          status: 'error',
+          decodedToken: decoded
+        });
+      }
+
+      // Test requests to the backend service
+      const backendUrl = process.env.BACKEND_URL || 'https://backend-415554190254.us-central1.run.app';
+      
+      // Prepare headers as they should be sent to the backend
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'x-user-id': verifiedToken.sub,
+        'Content-Type': 'application/json'
+      };
+
+      // Log diagnostic information
+      console.log('🔍 Debug validate-token request:', {
+        tokenLength: token.length,
+        tokenPreview: `${token.substring(0, 15)}...${token.substring(token.length - 15)}`,
+        decodedSub: verifiedToken.sub,
+        headers
+      });
+
+      return res.json({
+        status: 'success',
+        message: 'Token is valid',
+        userId: verifiedToken.sub,
+        decodedToken: verifiedToken,
+        correctHeaders: {
+          'Authorization': `Bearer ${token}`,
+          'x-user-id': verifiedToken.sub
+        },
+        tokenStructure: decoded,
+        expiresAt: new Date(verifiedToken.exp * 1000).toISOString(),
+        issuedAt: new Date(verifiedToken.iat * 1000).toISOString()
+      });
+    } catch (error) {
+      console.error('Debug validate-token error:', error);
+      return res.status(500).json({ 
+        error: 'Error validating token', 
+        details: error.message,
+        status: 'error'
+      });
     }
   });
 }
