@@ -69,12 +69,13 @@ export async function query(text, params = []) {
         const duration = Date.now() - start;
         // Always log results for debugging during this investigation
         console.log(`🔍 DEBUG [DB RESULT]: Query executed in ${duration}ms`);
-        console.log(`🔍 DEBUG [DB RESULT]: Row count = ${result.rowCount ?? 0}`);
+        console.log(`🔍 DEBUG [DB RESULT]: Row count = ${result.rowCount || 0}`);
         if (result.rowCount && result.rowCount > 0) {
             // Print the first row for debugging (sanitize sensitive data)
             const firstRow = { ...result.rows[0] };
-            // Remove password_hash if it exists
-            if ('password_hash' in firstRow) {
+            // Safely handle password_hash field if it exists
+            if (typeof firstRow === 'object' && firstRow !== null && 'password_hash' in firstRow) {
+                // @ts-ignore - Use type assertion since we've confirmed password_hash exists
                 firstRow.password_hash = '[REDACTED]';
             }
             console.log(`🔍 DEBUG [DB RESULT]: First row = ${JSON.stringify(firstRow)}`);
