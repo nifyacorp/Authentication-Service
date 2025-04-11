@@ -1,32 +1,56 @@
 import pkg from 'pg';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 const { Pool } = pkg;
 
 // Type imports (only for TypeScript, not for runtime)
 import type { PoolConfig, QueryResult, QueryResultRow } from 'pg';
+
+const secretManagerClient = new SecretManagerServiceClient();
+
+/**
+ * Get database password from Secret Manager
+ */
+async function getDbPassword(): Promise<string> {
+  try {
+    const secretName = 'projects/delta-entity-447812-p2/secrets/auth-db-app-password/versions/latest';
+    const [version] = await secretManagerClient.accessSecretVersion({ name: secretName });
+    
+    if (!version.payload?.data) {
+      throw new Error('Failed to retrieve database password from Secret Manager');
+    }
+
+    return version.payload.data.toString();
+  } catch (error) {
+    console.error('Failed to retrieve database password from Secret Manager:', error);
+    throw new Error('Failed to retrieve database credentials');
+  }
+}
 
 // Database connection configuration
 const config: PoolConfig = {
   host: process.env.DB_HOST || '/cloudsql/delta-entity-447812-p2:us-central1:auth-service-db',
   user: process.env.DB_USER || 'auth_service',
   database: process.env.DB_NAME || 'auth_db',
-  password: process.env.DB_PASSWORD,
+  // Password will be set later after fetching from Secret Manager
   port: parseInt(process.env.DB_PORT || '5432'),
   max: parseInt(process.env.DB_MAX_CONNECTIONS || '20'),
   idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000'),
   connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT || '2000')
 };
 
-// Create connection pool
-const pool = new Pool(config);
+// Create connection pool - will be initialized properly in initializeDatabase
+let pool: pkg.Pool;
 
-// Connection event handlers
-pool.on('connect', (client) => {
-  console.log('Database connected successfully');
-});
+// Connection event handlers for when pool is initialized
+function setupPoolEventHandlers(pool: pkg.Pool): void {
+  pool.on('connect', (client) => {
+    console.log('Database connected successfully');
+  });
 
-pool.on('error', (err) => {
-  console.error('Unexpected database error', err);
-});
+  pool.on('error', (err) => {
+    console.error('Unexpected database error', err);
+  });
+}
 
 /**
  * Execute a database query with logging
@@ -36,6 +60,11 @@ pool.on('error', (err) => {
  * @returns Query result
  */
 export async function query<T extends QueryResultRow = any>(text: string, params: any[] = []): Promise<QueryResult<T>> {
+  // Check if pool is initialized
+  if (!pool) {
+    throw new Error('Database pool not initialized. Call initializeDatabase() first.');
+  }
+
   // Log the query and parameters for debugging (not in production)
   if (process.env.NODE_ENV !== 'production') {
     console.debug(`Executing query: { \n  text: ${JSON.stringify(text)}, \n  params: ${JSON.stringify(params)} \n}`);
@@ -67,6 +96,18 @@ export async function query<T extends QueryResultRow = any>(text: string, params
  */
 export async function initializeDatabase(): Promise<void> {
   try {
+    // Get password from Secret Manager
+    const dbPassword = await getDbPassword();
+    
+    // Initialize pool with password
+    pool = new Pool({
+      ...config,
+      password: dbPassword
+    });
+    
+    // Set up event handlers
+    setupPoolEventHandlers(pool);
+    
     // Test database connection
     await query('SELECT NOW()');
     
