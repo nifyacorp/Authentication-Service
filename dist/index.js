@@ -6,15 +6,22 @@ import { initializeDatabase } from './database/client.js';
 import { formatErrorResponse } from './auth/errors/factory.js';
 // Load environment variables
 const PORT = process.env.PORT || 8080;
+const FRONTEND_URL = process.env.FRONTEND_URL || '';
 const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || 'localhost,127.0.0.1')
     .split(',')
     .map(origin => origin.trim());
+// Add FRONTEND_URL to allowed origins if it exists
+if (FRONTEND_URL && !CORS_ALLOWED_ORIGINS.includes(FRONTEND_URL)) {
+    CORS_ALLOWED_ORIGINS.push(FRONTEND_URL);
+}
 // Log runtime configuration
 console.log('Runtime config loaded:', {
     AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || 'https://authentication-service-415554190254.us-central1.run.app',
     BACKEND_SERVICE_URL: process.env.BACKEND_SERVICE_URL || 'https://backend-415554190254.us-central1.run.app',
     NODE_ENV: process.env.NODE_ENV || 'production',
     REACT_APP_ENV: process.env.REACT_APP_ENV || 'production',
+    FRONTEND_URL: FRONTEND_URL,
+    CORS_ALLOWED_ORIGINS: CORS_ALLOWED_ORIGINS,
     USE_NETLIFY_REDIRECTS: false
 });
 // Initialize Express app
@@ -28,10 +35,10 @@ app.use(cors({
             return callback(null, true);
         // Check if origin is allowed
         if (CORS_ALLOWED_ORIGINS.includes(origin) ||
-            CORS_ALLOWED_ORIGINS.some(allowed => origin.endsWith(allowed))) {
+            CORS_ALLOWED_ORIGINS.some(allowed => origin.endsWith(allowed) || origin.includes(allowed))) {
             return callback(null, true);
         }
-        // Log rejected origins
+        // Log rejected origins for debugging
         console.warn(`CORS blocked request from origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
     },
