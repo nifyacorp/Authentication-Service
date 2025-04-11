@@ -1,4 +1,8 @@
-import { Pool, PoolConfig, QueryResult, QueryResultRow } from 'pg';
+import pkg from 'pg';
+const { Pool } = pkg;
+
+// Type imports (only for TypeScript, not for runtime)
+import type { PoolConfig, QueryResult, QueryResultRow } from 'pg';
 
 // Database connection configuration
 const config: PoolConfig = {
@@ -88,7 +92,7 @@ export async function initializeDatabase(): Promise<void> {
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     `);
     
-    console.log('Available tables:', tablesResult.rows.map(row => row.table_name));
+    console.log('Available tables:', tablesResult.rows.map((row: { table_name: string }) => row.table_name));
     
     // Log users table structure
     const usersStructure = await query(`

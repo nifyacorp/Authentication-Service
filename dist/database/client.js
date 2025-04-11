@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import pkg from 'pg';
+const { Pool } = pkg;
 // Database connection configuration
 const config = {
     host: process.env.DB_HOST || '/cloudsql/delta-entity-447812-p2:us-central1:auth-service-db',
@@ -77,7 +78,7 @@ export async function initializeDatabase() {
       SELECT table_name FROM information_schema.tables 
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     `);
-        console.log('Available tables:', tablesResult.rows.map(row => row.table_name));
+        console.log('Available tables:', tablesResult.rows.map((row) => row.table_name));
         // Log users table structure
         const usersStructure = await query(`
       SELECT column_name, data_type, is_nullable 

@@ -20,6 +20,7 @@ The service follows a clean domain-driven design with clear separation of concer
 Authentication-Service/
 ├── src/
 │   ├── api/             # API routes definition
+│   ├── auth/            # Core authentication domain
 │   │   ├── controllers/ # Request handlers
 │   │   ├── errors/      # Error handling
 │   │   ├── models/      # Data models and repositories
@@ -181,6 +182,41 @@ Run in production:
 ```bash
 npm start
 ```
+
+## Recent Refactoring: Unification Plan
+
+The Authentication Service recently underwent a major refactoring to unify and simplify its architecture. The key changes included:
+
+### 1. Routes Consolidation
+- All routes are now defined in a single file: `/api/routes.ts`
+- Each route group is clearly documented and organized
+- Special middleware (rate limiting, debug mode) is applied consistently
+
+### 2. Controllers Consolidation
+- All controllers moved to `/auth/controllers/`
+- Consistent naming and export patterns
+- Clear separation of responsibilities
+- Improved error handling with factory patterns
+
+### 3. Models Consolidation
+- All models and interfaces in `/auth/models/`
+- Repository pattern for database operations
+- Consistent type definitions
+- Backward compatibility layer for smooth transition
+
+### 4. Error Handling Consolidation
+- Unified error factory in `/auth/errors/factory.ts`
+- Self-documenting error responses
+- Consistent error format across all endpoints
+- Enhanced debugging information in development mode
+
+### 5. Validation Consolidation
+- All validation schemas in `/auth/validation/`
+- Type-safe validation with Zod
+- Consistent error messages
+- Centralized validation middleware
+
+This refactoring has significantly improved the maintainability and understandability of the codebase, making it easier to implement new features and fix bugs.
 
 ## Contributing
 
