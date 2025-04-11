@@ -65,8 +65,8 @@ export const login = async (req, res, next) => {
         const user = await queries.getUserByEmail(email);
         if (!user) {
             console.log('Login attempt with non-existent email:', email);
-            const errorResponse = formatErrorResponse(req, 'Invalid credentials');
-            return res.status(errorResponse.status).json({ error: errorResponse });
+            const errorResponse = formatErrorResponse(req, 'User not found. Please check your email or register a new account.');
+            return res.status(404).json({ error: errorResponse });
         }
         // Check if account is locked
         if (user.locked_until && new Date(user.locked_until) > new Date()) {

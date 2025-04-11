@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../../config/jwt.js';
+import { generateAccessToken } from '../../utils/jwt.js';
 import { queries } from '../models/index.js';
 import { errorBuilders } from '../errors/factory.js';
 export const logout = async (req, res, next) => {
@@ -62,19 +63,59 @@ export const refreshToken = async (req, res, next) => {
     try {
         console.group('📝 Auth Service - Processing refresh token request');
         console.log('Request IP:', req.ip);
-        // Get request ID from headers using req.get for type safety
-        const requestId = req.get('x-request-id') || req.get('X-Request-ID') || 'unknown-request-id';
-        // Return a clear error that refresh tokens are temporarily disabled
-        const errorResponse = {
-            code: 'REFRESH_TOKENS_DISABLED',
-            message: 'Refresh tokens are temporarily disabled. Please log in again with your credentials.',
-            timestamp: new Date().toISOString(),
-            request_id: requestId // Use the extracted/generated request ID
-        };
-        console.log('Refresh tokens are temporarily disabled');
-        console.groupEnd();
-        // Return a 501 Not Implemented status to make it clear this is a deliberate choice
-        return res.status(501).json({ error: errorResponse });
+        // Get refresh token from request body
+        const { refreshToken } = req.body;
+        if (!refreshToken) {
+            console.log('Missing refresh token');
+            console.groupEnd();
+            return next(errorBuilders.badRequest(req, 'Refresh token is required'));
+        }
+        try {
+            const secret = await getJwtSecret();
+            // Verify the refresh token
+            const decoded = jwt.verify(refreshToken, secret);
+            // Verify token type
+            if (decoded.type !== 'refresh') {
+                console.log('Invalid token type for refresh');
+                console.groupEnd();
+                return next(errorBuilders.badRequest(req, 'Invalid token type'));
+            }
+            // Check if the refresh token exists in the database
+            const storedToken = await queries.getRefreshToken(refreshToken);
+            if (!storedToken) {
+                console.log('Refresh token not found or revoked');
+                console.groupEnd();
+                return next(errorBuilders.unauthorized(req, 'Invalid or expired refresh token'));
+            }
+            // Get user data
+            const userId = decoded.sub;
+            const user = await queries.getUserById(userId);
+            if (!user) {
+                console.log('User not found for token:', userId);
+                console.groupEnd();
+                return next(errorBuilders.notFound(req, 'User'));
+            }
+            // Generate new access token
+            console.log('Generating new access token for user:', userId);
+            const accessToken = await generateAccessToken(user.id, user.email, user.name, user.email_verified);
+            console.log('Token refresh successful for user:', userId);
+            console.groupEnd();
+            res.json({
+                accessToken,
+                refreshToken, // Return the same refresh token
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    email_verified: user.email_verified
+                }
+            });
+        }
+        catch (jwtError) {
+            console.log('JWT verification failed:', jwtError);
+            console.groupEnd();
+            return next(errorBuilders.unauthorized(req, 'Invalid or expired refresh token'));
+        }
     }
     catch (error) {
         console.error('Unhandled error in refreshToken endpoint:', error);

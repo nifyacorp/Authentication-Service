@@ -26,17 +26,23 @@ async function getDbPassword(): Promise<string> {
   }
 }
 
-// Database connection configuration
+// Database connection configuration - optimized for Cloud Run socket connection
 const config: PoolConfig = {
+  // For Cloud Run, we connect via Unix socket with the Cloud SQL Auth Proxy
   host: process.env.DB_HOST || '/cloudsql/delta-entity-447812-p2:us-central1:auth-service-db',
+  // Default user and database names if not provided by environment
   user: process.env.DB_USER || 'auth_service',
   database: process.env.DB_NAME || 'auth_db',
-  // Password will be set later after fetching from Secret Manager
-  port: parseInt(process.env.DB_PORT || '5432'),
+  // Connection pool configuration
   max: parseInt(process.env.DB_MAX_CONNECTIONS || '20'),
   idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000'),
   connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT || '2000')
 };
+
+// Port should only be used if not connecting through socket
+if (process.env.DB_PORT) {
+  config.port = parseInt(process.env.DB_PORT);
+}
 
 // Create connection pool - will be initialized properly in initializeDatabase
 let pool: pkg.Pool;
@@ -96,7 +102,7 @@ export async function query<T extends QueryResultRow = any>(text: string, params
  */
 export async function initializeDatabase(): Promise<void> {
   try {
-    // Get password from Secret Manager
+    // Always get password from Secret Manager for security
     const dbPassword = await getDbPassword();
     
     // Initialize pool with password
@@ -111,23 +117,10 @@ export async function initializeDatabase(): Promise<void> {
     // Test database connection
     await query('SELECT NOW()');
     
-    // Check if schema exists and create it if needed
-    const schemaExists = await query(`
-      SELECT EXISTS (
-        SELECT 1 FROM information_schema.tables 
-        WHERE table_schema = 'public' AND table_name = 'users'
-      )`);
+    // Log connection information (sanitized for security)
+    console.log(`Connected to database ${config.database} at ${config.host} as ${config.user}`);
     
-    if (!schemaExists.rows[0].exists) {
-      console.log('Creating database schema');
-      // Import schema from file
-      // This would typically read in the schema.sql file and execute it
-      // For this refactoring, we'll assume the schema already exists
-    } else {
-      console.log('Schema already exists');
-    }
-    
-    // Log available tables
+    // Check if schema exists and log tables
     const tablesResult = await query(`
       SELECT table_name FROM information_schema.tables 
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
@@ -135,14 +128,19 @@ export async function initializeDatabase(): Promise<void> {
     
     console.log('Available tables:', tablesResult.rows.map((row: { table_name: string }) => row.table_name));
     
-    // Log users table structure
-    const usersStructure = await query(`
-      SELECT column_name, data_type, is_nullable 
-      FROM information_schema.columns 
-      WHERE table_schema = 'public' AND table_name = 'users'
+    // Check refresh_tokens table specifically since that's what the code seems to use
+    const refreshTokensExists = await query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'refresh_tokens'
+      )
     `);
     
-    console.log('Users table structure:', usersStructure.rows);
+    if (!refreshTokensExists.rows[0].exists) {
+      console.warn('refresh_tokens table not found - schema might need updating');
+    } else {
+      console.log('refresh_tokens table confirmed');
+    }
   } catch (error) {
     console.error('Database initialization error:', error);
     throw error;

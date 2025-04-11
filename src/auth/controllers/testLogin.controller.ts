@@ -1,36 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
 import { LoginBody } from '../models/types.js';
 
+/**
+ * Middleware placeholder - no test accounts
+ * This controller has been intentionally emptied to remove all test accounts
+ */
 export const testLogin = async (req: Request<{}, {}, LoginBody>, res: Response, next: NextFunction) => {
-  try {
-    console.log('Checking for test account login');
-    const { email, password } = req.body;
-    
-    // Special case for test account
-    if (email === 'nifyacorp@gmail.com' && password === 'nifyaCorp12!') {
-      console.log('Test account login detected - providing direct access');
-      
-      // Generate tokens for test account
-      const testUserId = '1';
-      const accessToken = await generateAccessToken(testUserId, email, 'NIFYA Test User', true);
-      
-      // Return success response for test account
-      return res.json({
-        accessToken,
-        user: {
-          id: testUserId,
-          email: email,
-          name: 'NIFYA Test User',
-          email_verified: true
-        }
-      });
-    }
-    
-    // If not test account, call next middleware
-    return next();
-  } catch (error) {
-    console.error('Test login error:', error);
-    next(error);
-  }
+  // Simply pass to the next middleware without special account handling
+  return next();
 }; 
