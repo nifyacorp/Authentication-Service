@@ -61,12 +61,24 @@ export const login = async (req, res, next) => {
     try {
         console.log('Processing login request');
         const { email, password } = req.body;
+        console.log(`🔍 DEBUG [LOGIN]: Processing login request for email: ${email}`);
         // Get user from database
+        console.log(`🔍 DEBUG [LOGIN]: About to query database for user`);
         const user = await queries.getUserByEmail(email);
+        console.log(`🔍 DEBUG [LOGIN]: Database query completed`);
         if (!user) {
+            console.log(`🔍 DEBUG [LOGIN]: No user found with email: ${email}`);
             console.log('Login attempt with non-existent email:', email);
             const errorResponse = formatErrorResponse(req, 'User not found. Please check your email or register a new account.');
             return res.status(404).json({ error: errorResponse });
+        }
+        console.log(`🔍 DEBUG [LOGIN]: User found with ID: ${user.id}`);
+        // Additional verification to catch any phantom users
+        if (email === 'ratonxi@gmail.com') {
+            console.log(`🔍 DEBUG [LOGIN]: Special tracking for ratonxi@gmail.com`);
+            console.log(`🔍 DEBUG [LOGIN]: User object exists: ${!!user}`);
+            console.log(`🔍 DEBUG [LOGIN]: User ID: ${user.id}`);
+            console.log(`🔍 DEBUG [LOGIN]: User email verified: ${user.email_verified}`);
         }
         // Check if account is locked
         if (user.locked_until && new Date(user.locked_until) > new Date()) {
@@ -80,7 +92,9 @@ export const login = async (req, res, next) => {
             const errorResponse = formatErrorResponse(req, 'Invalid login method');
             return res.status(errorResponse.status).json({ error: errorResponse });
         }
+        console.log(`🔍 DEBUG [LOGIN]: About to verify password`);
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        console.log(`🔍 DEBUG [LOGIN]: Password verification result: ${isValidPassword}`);
         if (!isValidPassword) {
             const loginAttempts = (user.login_attempts || 0) + 1;
             let lockUntil;
@@ -103,16 +117,25 @@ export const login = async (req, res, next) => {
             await queries.updateLoginAttempts(user.id, 0, undefined);
         }
         // Generate tokens
+        console.log(`🔍 DEBUG [LOGIN]: Generating tokens for user: ${user.id}`);
         const [accessToken, refreshToken] = await Promise.all([
             generateAccessToken(user.id, user.email, user.name, user.email_verified),
             generateRefreshToken(user.id)
         ]);
         // Store refresh token
+        console.log(`🔍 DEBUG [LOGIN]: About to store refresh token in database`);
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
-        await queries.createRefreshToken(user.id, refreshToken, expiresAt);
+        try {
+            await queries.createRefreshToken(user.id, refreshToken, expiresAt);
+            console.log(`🔍 DEBUG [LOGIN]: Refresh token stored successfully`);
+        }
+        catch (error) {
+            console.log(`🔍 DEBUG [LOGIN]: Error storing refresh token: ${error instanceof Error ? error.message : String(error)}`);
+        }
         console.log(`Successful login for user: ${user.id}`);
-        res.json({
+        // Construct the response
+        const response = {
             accessToken,
             refreshToken,
             user: {
@@ -121,7 +144,9 @@ export const login = async (req, res, next) => {
                 name: user.name,
                 email_verified: user.email_verified
             }
-        });
+        };
+        console.log(`🔍 DEBUG [LOGIN]: Login successful, sending response`);
+        res.json(response);
     }
     catch (error) {
         console.error('Login error:', error);

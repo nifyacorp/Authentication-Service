@@ -43,14 +43,56 @@ export const userRepository = {
      * Find a user by email
      */
     async findByEmail(email) {
-        const result = await query('SELECT * FROM users WHERE email = $1', [email]);
-        return result.rows[0] || null;
+        console.log(`🔍 DEBUG [USER REPO]: Finding user by email: ${email}`);
+        // Special debug code to check for test accounts
+        if (email === 'ratonxi@gmail.com') {
+            console.log(`🔍 DEBUG [USER REPO]: Checking special case for email ${email}`);
+        }
+        try {
+            // Execute the query with detailed logging
+            const result = await query('SELECT * FROM users WHERE email = $1', [email]);
+            // Log the result details
+            console.log(`🔍 DEBUG [USER REPO]: findByEmail result rowCount: ${result.rowCount ?? 0}`);
+            if (result.rowCount && result.rowCount > 0) {
+                const user = result.rows[0];
+                // Deep copy the user object and sanitize sensitive data for logging
+                const userForLogging = { ...user };
+                if (userForLogging.password_hash) {
+                    userForLogging.password_hash = '[REDACTED]';
+                }
+                console.log(`🔍 DEBUG [USER REPO]: User found: ${JSON.stringify(userForLogging)}`);
+                // Additional checks to verify user ID matches expected pattern
+                if (userForLogging.id) {
+                    console.log(`🔍 DEBUG [USER REPO]: User ID exists: ${userForLogging.id}`);
+                }
+                // Check if this is a special user ID we're looking for
+                if (userForLogging.id === '65c6074d-dbc4-4091-8e45-b6aecffd9ab9') {
+                    console.log(`🔍 DEBUG [USER REPO]: Found the specific user ID we're tracking`);
+                }
+                return user;
+            }
+            else {
+                console.log(`🔍 DEBUG [USER REPO]: No user found with email: ${email}`);
+                return null;
+            }
+        }
+        catch (error) {
+            console.error(`⚠️ ERROR [USER REPO]: Error finding user by email: ${error instanceof Error ? error.message : String(error)}`);
+            throw error;
+        }
     },
     /**
      * Find a user by ID
      */
     async findById(id) {
+        console.log(`🔍 DEBUG [USER REPO]: Finding user by ID: ${id}`);
         const result = await query('SELECT * FROM users WHERE id = $1', [id]);
+        if (result.rowCount && result.rowCount > 0) {
+            console.log(`🔍 DEBUG [USER REPO]: User found by ID: ${id}`);
+        }
+        else {
+            console.log(`🔍 DEBUG [USER REPO]: No user found with ID: ${id}`);
+        }
         return result.rows[0] || null;
     },
     /**
@@ -134,29 +176,163 @@ export const userRepository = {
      * Create a refresh token
      */
     async createRefreshToken(userId, token, expiresAt) {
-        const result = await query(`INSERT INTO refresh_tokens (user_id, token, expires_at)
-       VALUES ($1, $2, $3)
-       RETURNING *`, [userId, token, expiresAt]);
-        return result.rows[0];
+        console.log(`🔍 DEBUG [TOKENS]: Creating refresh token for user: ${userId}`);
+        try {
+            // First attempt with tokens table since that's what's in the database
+            console.log(`🔍 DEBUG [TOKENS]: Attempting to insert into tokens table first`);
+            let result;
+            try {
+                result = await query(`INSERT INTO tokens (user_id, refresh_token, expires_at)
+           VALUES ($1, $2, $3)
+           RETURNING *`, [userId, token, expiresAt]);
+                console.log(`🔍 DEBUG [TOKENS]: Successfully inserted into tokens table`);
+            }
+            catch (error) {
+                console.log(`🔍 DEBUG [TOKENS]: Error inserting into tokens table: ${error instanceof Error ? error.message : String(error)}`);
+                // Check if refresh_tokens table exists as fallback
+                console.log(`🔍 DEBUG [TOKENS]: Checking if refresh_tokens table exists`);
+                const refreshTokensTableExists = await query(`
+          SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables 
+            WHERE table_schema = 'public' AND table_name = 'refresh_tokens'
+          )
+        `);
+                if (refreshTokensTableExists.rows[0] && refreshTokensTableExists.rows[0].exists) {
+                    console.log(`🔍 DEBUG [TOKENS]: refresh_tokens table exists, trying to insert there instead`);
+                    // Try to insert into refresh_tokens table as fallback
+                    try {
+                        result = await query(`INSERT INTO refresh_tokens (user_id, token, expires_at)
+               VALUES ($1, $2, $3)
+               RETURNING *`, [userId, token, expiresAt]);
+                        console.log(`🔍 DEBUG [TOKENS]: Successfully inserted into refresh_tokens table`);
+                    }
+                    catch (refreshTokensInsertError) {
+                        console.log(`🔍 DEBUG [TOKENS]: Error inserting into refresh_tokens table: ${refreshTokensInsertError instanceof Error ? refreshTokensInsertError.message : String(refreshTokensInsertError)}`);
+                        throw refreshTokensInsertError;
+                    }
+                }
+                else {
+                    // Re-throw the original error
+                    throw error;
+                }
+            }
+            console.log(`🔍 DEBUG [TOKENS]: Refresh token stored with ID: ${result?.rows?.[0]?.id || 'unknown'}`);
+            return result.rows[0];
+        }
+        catch (error) {
+            console.error(`⚠️ ERROR [TOKENS]: Failed to create refresh token: ${error instanceof Error ? error.message : String(error)}`);
+            throw error;
+        }
     },
     /**
      * Find refresh token
      */
     async findRefreshToken(token) {
-        const result = await query('SELECT * FROM refresh_tokens WHERE token = $1 AND revoked = false', [token]);
-        return result.rows[0] || null;
+        console.log(`🔍 DEBUG [TOKENS]: Finding refresh token: ${token.substring(0, 10)}...`);
+        try {
+            // First try to find in tokens table
+            console.log(`🔍 DEBUG [TOKENS]: Searching in tokens table`);
+            let result;
+            try {
+                result = await query('SELECT * FROM tokens WHERE refresh_token = $1 AND is_revoked = false', [token]);
+                console.log(`🔍 DEBUG [TOKENS]: Tokens table search result count: ${result.rowCount ?? 0}`);
+                if (result.rowCount && result.rowCount > 0) {
+                    console.log(`🔍 DEBUG [TOKENS]: Token found in tokens table`);
+                    return result.rows[0];
+                }
+            }
+            catch (error) {
+                console.log(`🔍 DEBUG [TOKENS]: Error searching tokens table: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            // If not found, try refresh_tokens table
+            console.log(`🔍 DEBUG [TOKENS]: Searching in refresh_tokens table`);
+            try {
+                result = await query('SELECT * FROM refresh_tokens WHERE token = $1 AND revoked = false', [token]);
+                console.log(`🔍 DEBUG [TOKENS]: refresh_tokens table search result count: ${result.rowCount ?? 0}`);
+                if (result.rowCount && result.rowCount > 0) {
+                    console.log(`🔍 DEBUG [TOKENS]: Token found in refresh_tokens table`);
+                    return result.rows[0];
+                }
+            }
+            catch (error) {
+                console.log(`🔍 DEBUG [TOKENS]: Error searching refresh_tokens table: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            console.log(`🔍 DEBUG [TOKENS]: Token not found in any table`);
+            return null;
+        }
+        catch (error) {
+            console.error(`⚠️ ERROR [TOKENS]: Unexpected error finding refresh token: ${error instanceof Error ? error.message : String(error)}`);
+            throw error;
+        }
     },
     /**
      * Revoke a refresh token
      */
     async revokeRefreshToken(token) {
-        await query('UPDATE refresh_tokens SET revoked = true WHERE token = $1', [token]);
+        console.log(`🔍 DEBUG [TOKENS]: Revoking refresh token: ${token.substring(0, 10)}...`);
+        try {
+            // Try to revoke in tokens table first
+            console.log(`🔍 DEBUG [TOKENS]: Attempting to revoke in tokens table`);
+            try {
+                const tokensResult = await query('UPDATE tokens SET is_revoked = true WHERE refresh_token = $1', [token]);
+                console.log(`🔍 DEBUG [TOKENS]: Tokens table update result: ${tokensResult.rowCount ?? 0} rows affected`);
+                if (tokensResult.rowCount && tokensResult.rowCount > 0) {
+                    console.log(`🔍 DEBUG [TOKENS]: Token successfully revoked in tokens table`);
+                    return;
+                }
+            }
+            catch (error) {
+                console.log(`🔍 DEBUG [TOKENS]: Error revoking in tokens table: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            // Try to revoke in refresh_tokens table
+            console.log(`🔍 DEBUG [TOKENS]: Attempting to revoke in refresh_tokens table`);
+            try {
+                const refreshResult = await query('UPDATE refresh_tokens SET revoked = true WHERE token = $1', [token]);
+                console.log(`🔍 DEBUG [TOKENS]: refresh_tokens table update result: ${refreshResult.rowCount ?? 0} rows affected`);
+                if (refreshResult.rowCount && refreshResult.rowCount > 0) {
+                    console.log(`🔍 DEBUG [TOKENS]: Token successfully revoked in refresh_tokens table`);
+                    return;
+                }
+            }
+            catch (error) {
+                console.log(`🔍 DEBUG [TOKENS]: Error revoking in refresh_tokens table: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            console.log(`🔍 DEBUG [TOKENS]: Token not found in any table for revocation`);
+        }
+        catch (error) {
+            console.error(`⚠️ ERROR [TOKENS]: Unexpected error revoking token: ${error instanceof Error ? error.message : String(error)}`);
+            throw error;
+        }
     },
     /**
      * Revoke all refresh tokens for a user
      */
     async revokeAllUserRefreshTokens(userId) {
-        await query('UPDATE refresh_tokens SET revoked = true WHERE user_id = $1', [userId]);
+        console.log(`🔍 DEBUG [TOKENS]: Revoking all refresh tokens for user: ${userId}`);
+        try {
+            // Try to revoke in tokens table
+            console.log(`🔍 DEBUG [TOKENS]: Attempting to revoke all tokens in tokens table for user`);
+            try {
+                const tokensResult = await query('UPDATE tokens SET is_revoked = true WHERE user_id = $1', [userId]);
+                console.log(`🔍 DEBUG [TOKENS]: Tokens table update result: ${tokensResult.rowCount ?? 0} rows affected`);
+            }
+            catch (error) {
+                console.log(`🔍 DEBUG [TOKENS]: Error revoking all tokens in tokens table: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            // Also try to revoke in refresh_tokens table
+            console.log(`🔍 DEBUG [TOKENS]: Attempting to revoke all tokens in refresh_tokens table for user`);
+            try {
+                const refreshResult = await query('UPDATE refresh_tokens SET revoked = true WHERE user_id = $1', [userId]);
+                console.log(`🔍 DEBUG [TOKENS]: refresh_tokens table update result: ${refreshResult.rowCount ?? 0} rows affected`);
+            }
+            catch (error) {
+                console.log(`🔍 DEBUG [TOKENS]: Error revoking all tokens in refresh_tokens table: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+        catch (error) {
+            console.error(`⚠️ ERROR [TOKENS]: Unexpected error revoking all tokens: ${error instanceof Error ? error.message : String(error)}`);
+            throw error;
+        }
     },
     // Password reset operations
     /**

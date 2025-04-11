@@ -8,10 +8,12 @@ const secretManagerClient = new SecretManagerServiceClient();
 async function getDbPassword() {
     try {
         const secretName = 'projects/delta-entity-447812-p2/secrets/auth-db-app-password/versions/latest';
+        console.log(`🔍 DEBUG: Retrieving database password from ${secretName}`);
         const [version] = await secretManagerClient.accessSecretVersion({ name: secretName });
         if (!version.payload?.data) {
             throw new Error('Failed to retrieve database password from Secret Manager');
         }
+        console.log(`🔍 DEBUG: Successfully retrieved database password`);
         return version.payload.data.toString();
     }
     catch (error) {
@@ -58,23 +60,30 @@ export async function query(text, params = []) {
     if (!pool) {
         throw new Error('Database pool not initialized. Call initializeDatabase() first.');
     }
-    // Log the query and parameters for debugging (not in production)
-    if (process.env.NODE_ENV !== 'production') {
-        console.debug(`Executing query: { \n  text: ${JSON.stringify(text)}, \n  params: ${JSON.stringify(params)} \n}`);
-    }
+    // Always log the query for debugging during this investigation
+    console.log(`🔍 DEBUG [DB QUERY]: ${text}`);
+    console.log(`🔍 DEBUG [DB PARAMS]: ${JSON.stringify(params)}`);
     try {
         const start = Date.now();
         const result = await pool.query(text, params);
         const duration = Date.now() - start;
-        // Log query execution time (not in production)
-        if (process.env.NODE_ENV !== 'production') {
-            console.debug(`Query executed in ${duration}ms: { rowCount: ${result.rowCount} }`);
+        // Always log results for debugging during this investigation
+        console.log(`🔍 DEBUG [DB RESULT]: Query executed in ${duration}ms`);
+        console.log(`🔍 DEBUG [DB RESULT]: Row count = ${result.rowCount ?? 0}`);
+        if (result.rowCount && result.rowCount > 0) {
+            // Print the first row for debugging (sanitize sensitive data)
+            const firstRow = { ...result.rows[0] };
+            // Remove password_hash if it exists
+            if ('password_hash' in firstRow) {
+                firstRow.password_hash = '[REDACTED]';
+            }
+            console.log(`🔍 DEBUG [DB RESULT]: First row = ${JSON.stringify(firstRow)}`);
         }
         return result;
     }
     catch (error) {
         // Always log database errors
-        console.error(`Database query error: ${error instanceof Error ? error.message : String(error)}`, {
+        console.error(`⚠️ DATABASE ERROR: ${error instanceof Error ? error.message : String(error)}`, {
             query: text,
             params
         });
@@ -93,18 +102,25 @@ export async function initializeDatabase() {
             ...config,
             password: dbPassword
         });
+        // Log complete connection details for debugging (redact password)
+        console.log(`🔍 DEBUG [DB CONNECTION]: Connecting to database with configuration:`);
+        console.log(`🔍 DEBUG [DB CONNECTION]: Host: ${config.host}`);
+        console.log(`🔍 DEBUG [DB CONNECTION]: User: ${config.user}`);
+        console.log(`🔍 DEBUG [DB CONNECTION]: Database: ${config.database}`);
+        console.log(`🔍 DEBUG [DB CONNECTION]: Max connections: ${config.max}`);
         // Set up event handlers
         setupPoolEventHandlers(pool);
         // Test database connection
-        await query('SELECT NOW()');
+        await query('SELECT NOW() as connection_time');
         // Log connection information (sanitized for security)
-        console.log(`Connected to database ${config.database} at ${config.host} as ${config.user}`);
+        console.log(`🔍 DEBUG [DB CONNECTION]: Connected to database ${config.database} at ${config.host} as ${config.user}`);
         // Check if schema exists and log tables
         const tablesResult = await query(`
       SELECT table_name FROM information_schema.tables 
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     `);
-        console.log('Available tables:', tablesResult.rows.map((row) => row.table_name));
+        const tableNames = tablesResult.rows.map((row) => row.table_name);
+        console.log(`🔍 DEBUG [DB TABLES]: Available tables: ${JSON.stringify(tableNames)}`);
         // Check refresh_tokens table specifically since that's what the code seems to use
         const refreshTokensExists = await query(`
       SELECT EXISTS (
@@ -112,15 +128,37 @@ export async function initializeDatabase() {
         WHERE table_schema = 'public' AND table_name = 'refresh_tokens'
       )
     `);
-        if (!refreshTokensExists.rows[0].exists) {
-            console.warn('refresh_tokens table not found - schema might need updating');
+        console.log(`🔍 DEBUG [DB TABLES]: refresh_tokens table exists: ${refreshTokensExists.rows[0].exists}`);
+        // Check tokens table as well
+        const tokensExists = await query(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'tokens'
+      )
+    `);
+        console.log(`🔍 DEBUG [DB TABLES]: tokens table exists: ${tokensExists.rows[0].exists}`);
+        // Try to check if it's an automatic table mapping/alias issue
+        if (refreshTokensExists.rows[0].exists) {
+            try {
+                const refreshTokensCount = await query('SELECT COUNT(*) FROM refresh_tokens');
+                console.log(`🔍 DEBUG [DB TABLES]: refresh_tokens table row count: ${refreshTokensCount.rows[0].count}`);
+            }
+            catch (e) {
+                console.log(`🔍 DEBUG [DB TABLES]: Error querying refresh_tokens: ${e instanceof Error ? e.message : String(e)}`);
+            }
         }
-        else {
-            console.log('refresh_tokens table confirmed');
+        if (tokensExists.rows[0].exists) {
+            try {
+                const tokensCount = await query('SELECT COUNT(*) FROM tokens');
+                console.log(`🔍 DEBUG [DB TABLES]: tokens table row count: ${tokensCount.rows[0].count}`);
+            }
+            catch (e) {
+                console.log(`🔍 DEBUG [DB TABLES]: Error querying tokens: ${e instanceof Error ? e.message : String(e)}`);
+            }
         }
     }
     catch (error) {
-        console.error('Database initialization error:', error);
+        console.error('⚠️ DATABASE INITIALIZATION ERROR:', error);
         throw error;
     }
 }

@@ -84,14 +84,14 @@ export async function query<T extends QueryResultRow = any>(text: string, params
     
     // Always log results for debugging during this investigation
     console.log(`🔍 DEBUG [DB RESULT]: Query executed in ${duration}ms`);
-    console.log(`🔍 DEBUG [DB RESULT]: Row count = ${result.rowCount}`);
+    console.log(`🔍 DEBUG [DB RESULT]: Row count = ${result.rowCount ?? 0}`);
     
-    if (result.rowCount > 0) {
+    if (result.rowCount && result.rowCount > 0) {
       // Print the first row for debugging (sanitize sensitive data)
       const firstRow = {...result.rows[0]};
       // Remove password_hash if it exists
-      if (firstRow.password_hash) {
-        firstRow.password_hash = '[REDACTED]';
+      if ('password_hash' in firstRow) {
+        (firstRow as any).password_hash = '[REDACTED]';
       }
       console.log(`🔍 DEBUG [DB RESULT]: First row = ${JSON.stringify(firstRow)}`);
     }
