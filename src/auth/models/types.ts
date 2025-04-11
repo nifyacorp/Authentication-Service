@@ -7,9 +7,6 @@ export interface User {
   id: string;
   email: string;
   password_hash?: string;
-  first_name?: string;
-  last_name?: string;
-  name?: string; // Virtual property for backward compatibility
   created_at: Date;
   updated_at: Date;
   email_verified: boolean;
@@ -25,7 +22,6 @@ export interface User {
 export interface UserProfile {
   id: string;
   email: string;
-  name?: string;
   createdAt: string;
   emailVerified: boolean;
   pictureUrl?: string;
@@ -43,7 +39,6 @@ export interface LoginResponse {
   user: {
     id: string;
     email: string;
-    name: string;
     email_verified: boolean;
   };
   accessToken: string;
@@ -89,7 +84,6 @@ export interface LoginBody {
 export interface SignupBody {
   email: string;
   password: string;
-  name?: string;
 }
 
 /**
@@ -148,7 +142,6 @@ export interface AuthRequest<
   user?: {
     id: string;
     email: string;
-    name: string;
     email_verified: boolean;
   };
 } 

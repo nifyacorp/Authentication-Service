@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { userRepository } from '../models/user.repository.js';
 import { AUTH_ERRORS } from '../errors/factory.js';
 import { 
@@ -30,28 +31,13 @@ export const authService = {
    */
   async createUser(
     email: string, 
-    password: string, 
-    name?: string
+    password: string
   ) {
     // Check if email exists
     const existingUser = await userRepository.findByEmail(email);
     if (existingUser) {
       throw AUTH_ERRORS.EMAIL_EXISTS;
     }
-    
-    // Extract username from email if name not provided
-    let extractedName = email.split('@')[0];
-    
-    // Sanitize the extracted name 
-    extractedName = extractedName.replace(/[^A-Za-z0-9._\s]/g, '');
-    
-    // Ensure it's at least 2 characters (minimum required by validation)
-    if (extractedName.length < 2) {
-      extractedName = extractedName.padEnd(2, 'x');
-    }
-    
-    // Use the extracted name if no name is provided
-    const userName = name || extractedName;
     
     // Hash password
     const salt = await bcrypt.genSalt(SALT_ROUNDS);
@@ -60,8 +46,7 @@ export const authService = {
     // Create user
     const user = await userRepository.createUser(
       email,
-      hashedPassword,
-      userName
+      hashedPassword
     );
     
     // Sync user to backend
@@ -78,7 +63,6 @@ export const authService = {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
         email_verified: user.email_verified
       }
     };
@@ -189,8 +173,7 @@ export const authService = {
     // Generate tokens
     const accessToken = await generateAccessToken(
       user.id, 
-      user.email, 
-      user.name || '', 
+      user.email,
       user.email_verified
     );
     
@@ -207,7 +190,6 @@ export const authService = {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name || '',
         email_verified: user.email_verified
       }
     };
@@ -265,8 +247,7 @@ export const authService = {
     // Generate new tokens
     const newAccessToken = await generateAccessToken(
       user.id, 
-      user.email, 
-      user.name || '', 
+      user.email,
       user.email_verified
     );
     
@@ -283,7 +264,6 @@ export const authService = {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name || '',
         email_verified: user.email_verified
       }
     };
@@ -314,7 +294,6 @@ export const authService = {
     return {
       id: user.id,
       email: user.email,
-      name: user.name || '',
       createdAt: user.created_at.toISOString(),
       emailVerified: user.email_verified,
       pictureUrl: user.picture_url,

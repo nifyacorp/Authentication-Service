@@ -14,20 +14,7 @@ import { formatErrorResponse } from '../errors/factory.js';
 export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, next: NextFunction) => {
   try {
     console.log('Processing signup request');
-    const { email, password, name = '' } = req.body;
-
-    // Extract username from email (part before @) if no name provided
-    let userName = name;
-    if (!userName) {
-      let extractedName = email.split('@')[0];
-      // Sanitize the extracted name to only include allowed characters
-      extractedName = extractedName.replace(/[^A-Za-z0-9._\s]/g, '');
-      // Ensure it's at least 2 characters
-      if (extractedName.length < 2) {
-        extractedName = extractedName.padEnd(2, 'x');
-      }
-      userName = extractedName;
-    }
+    const { email, password } = req.body;
 
     // Check if email exists
     const existingUser = await queries.getUserByEmail(email);
@@ -46,8 +33,7 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, ne
     // Create user in database
     const user = await queries.createUser(
       email,
-      hashedPassword,
-      userName
+      hashedPassword
     );
 
     console.log('User created successfully:', user.id);
@@ -58,7 +44,6 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, ne
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
         email_verified: user.email_verified
       }
     });
@@ -150,7 +135,7 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response, next
     // Generate tokens
     console.log(`🔍 DEBUG [LOGIN]: Generating tokens for user: ${user.id}`);
     const [accessToken, refreshToken] = await Promise.all([
-      generateAccessToken(user.id, user.email, user.name, user.email_verified),
+      generateAccessToken(user.id, user.email, user.email_verified),
       generateRefreshToken(user.id)
     ]);
     
@@ -174,7 +159,6 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response, next
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
         email_verified: user.email_verified
       }
     };
@@ -210,7 +194,6 @@ export const getCurrentUser = async (req: AuthRequest, res: Response, next: Next
     const userProfile: UserProfile = {
       id: user.id,
       email: user.email,
-      name: user.name,
       createdAt: user.created_at.toISOString(),
       emailVerified: user.email_verified,
       pictureUrl: user.picture_url

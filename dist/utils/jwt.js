@@ -20,17 +20,15 @@ const getExpirationSeconds = (expirationString) => {
  *
  * @param userId User ID to include in the token
  * @param email User email to include in the token
- * @param name User name to include in the token (optional)
  * @param emailVerified Whether the user's email is verified
  * @returns JWT access token
  */
-export const generateAccessToken = async (userId, email, name, emailVerified = false) => {
+export const generateAccessToken = async (userId, email, emailVerified = false) => {
     const options = {};
     options.expiresIn = JWT_EXPIRES_IN;
     return jwt.sign({
         sub: userId,
         email,
-        name: name || email.split('@')[0],
         email_verified: emailVerified,
         type: 'access'
     }, JWT_SECRET, options);

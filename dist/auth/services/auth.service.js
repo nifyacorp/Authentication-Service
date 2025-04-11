@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { userRepository } from '../models/user.repository.js';
 import { AUTH_ERRORS } from '../errors/factory.js';
 import { generateAccessToken, generateRefreshToken, verifyToken, calculateExpirationDate, getJwtExpirationSeconds, REFRESH_TOKEN_EXPIRES_IN } from '../../utils/jwt.js';
@@ -15,27 +16,17 @@ export const authService = {
     /**
      * Create a new user
      */
-    async createUser(email, password, name) {
+    async createUser(email, password) {
         // Check if email exists
         const existingUser = await userRepository.findByEmail(email);
         if (existingUser) {
             throw AUTH_ERRORS.EMAIL_EXISTS;
         }
-        // Extract username from email if name not provided
-        let extractedName = email.split('@')[0];
-        // Sanitize the extracted name 
-        extractedName = extractedName.replace(/[^A-Za-z0-9._\s]/g, '');
-        // Ensure it's at least 2 characters (minimum required by validation)
-        if (extractedName.length < 2) {
-            extractedName = extractedName.padEnd(2, 'x');
-        }
-        // Use the extracted name if no name is provided
-        const userName = name || extractedName;
         // Hash password
         const salt = await bcrypt.genSalt(SALT_ROUNDS);
         const hashedPassword = await bcrypt.hash(password, salt);
         // Create user
-        const user = await userRepository.createUser(email, hashedPassword, userName);
+        const user = await userRepository.createUser(email, hashedPassword);
         // Sync user to backend
         try {
             await this.syncUserToBackend(user.id, user.email);
@@ -50,7 +41,6 @@ export const authService = {
             user: {
                 id: user.id,
                 email: user.email,
-                name: user.name,
                 email_verified: user.email_verified
             }
         };
@@ -142,7 +132,7 @@ export const authService = {
             await userRepository.updateLoginAttempts(user.id, 0, undefined);
         }
         // Generate tokens
-        const accessToken = await generateAccessToken(user.id, user.email, user.name || '', user.email_verified);
+        const accessToken = await generateAccessToken(user.id, user.email, user.email_verified);
         const refreshToken = await generateRefreshToken(user.id);
         // Store refresh token
         const expiresAt = calculateExpirationDate(REFRESH_TOKEN_EXPIRES_IN);
@@ -154,7 +144,6 @@ export const authService = {
             user: {
                 id: user.id,
                 email: user.email,
-                name: user.name || '',
                 email_verified: user.email_verified
             }
         };
@@ -198,7 +187,7 @@ export const authService = {
         // Revoke old token
         await userRepository.revokeRefreshToken(refreshToken);
         // Generate new tokens
-        const newAccessToken = await generateAccessToken(user.id, user.email, user.name || '', user.email_verified);
+        const newAccessToken = await generateAccessToken(user.id, user.email, user.email_verified);
         const newRefreshToken = await generateRefreshToken(user.id);
         // Store new refresh token
         const expiresAt = calculateExpirationDate(REFRESH_TOKEN_EXPIRES_IN);
@@ -210,7 +199,6 @@ export const authService = {
             user: {
                 id: user.id,
                 email: user.email,
-                name: user.name || '',
                 email_verified: user.email_verified
             }
         };
@@ -236,7 +224,6 @@ export const authService = {
         return {
             id: user.id,
             email: user.email,
-            name: user.name || '',
             createdAt: user.created_at.toISOString(),
             emailVerified: user.email_verified,
             pictureUrl: user.picture_url,

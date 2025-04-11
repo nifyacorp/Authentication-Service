@@ -97,7 +97,7 @@ export const refreshToken = async (req, res, next) => {
             }
             // Generate new access token
             console.log('Generating new access token for user:', userId);
-            const accessToken = await generateAccessToken(user.id, user.email, user.name, user.email_verified);
+            const accessToken = await generateAccessToken(user.id, user.email, user.email_verified);
             console.log('Token refresh successful for user:', userId);
             console.groupEnd();
             res.json({
@@ -106,7 +106,6 @@ export const refreshToken = async (req, res, next) => {
                 user: {
                     id: user.id,
                     email: user.email,
-                    name: user.name,
                     email_verified: user.email_verified
                 }
             });
@@ -217,7 +216,6 @@ export const getSession = async (req, res, next) => {
                 user: {
                     id: user.id,
                     email: user.email,
-                    name: user.name,
                     email_verified: user.email_verified
                 },
                 session: {

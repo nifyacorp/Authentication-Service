@@ -11,50 +11,17 @@ export const userRepository = {
   async createUser(
     email: string,
     passwordHash: string | null,
-    name: string | null | undefined,
     googleId?: string,
     pictureUrl?: string
   ): Promise<User> {
-    // Set a default name if none provided
-    let userName = name;
-    
-    // If no name provided or it's empty, use the email username part
-    if (!userName || userName.trim() === '') {
-      userName = email.split('@')[0] || 'User';
-      // Sanitize the username (remove special characters)
-      userName = userName.replace(/[^A-Za-z0-9._\s]/g, '');
-      // Ensure it's at least 2 characters
-      if (userName.length < 2) {
-        userName = 'User';
-      }
-    }
-    
-    // Split the name into first_name and last_name
-    let first_name = userName;
-    let last_name = '';
-    
-    // If name contains a space, split it into first and last name
-    const nameParts = userName.split(' ');
-    if (nameParts.length > 1) {
-      first_name = nameParts[0];
-      last_name = nameParts.slice(1).join(' ');
-    }
-    
     const result = await query<User>(
-      `INSERT INTO users (email, password_hash, first_name, last_name, google_id, picture_url, email_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO users (email, password_hash, google_id, picture_url, email_verified)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [email, passwordHash, first_name, last_name, googleId, pictureUrl, googleId ? true : false]
+      [email, passwordHash, googleId, pictureUrl, googleId ? true : false]
     );
     
-    // Construct full name for backward compatibility with code expecting 'name' property
-    const user = result.rows[0];
-    if (user && user.first_name) {
-      // @ts-ignore - Adding virtual property for backward compatibility
-      user.name = `${user.first_name || ''} ${user.last_name || ''}`.trim();
-    }
-    
-    return user;
+    return result.rows[0];
   },
 
   /**
@@ -147,7 +114,6 @@ export const userRepository = {
   async updateProfile(
     userId: string,
     data: {
-      name?: string;
       googleId?: string;
       pictureUrl?: string;
       emailVerified?: boolean;
@@ -157,19 +123,6 @@ export const userRepository = {
     const updateParts = [];
     const values = [];
     let paramIndex = 1;
-
-    if (data.name !== undefined) {
-      // Split name into first_name and last_name
-      const nameParts = data.name.split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-      
-      updateParts.push(`first_name = $${paramIndex++}`);
-      values.push(firstName);
-      
-      updateParts.push(`last_name = $${paramIndex++}`);
-      values.push(lastName);
-    }
 
     if (data.googleId !== undefined) {
       updateParts.push(`google_id = $${paramIndex++}`);

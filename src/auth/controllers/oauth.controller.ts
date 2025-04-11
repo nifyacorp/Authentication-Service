@@ -60,75 +60,39 @@ export const getGoogleAuthUrl = async (req: Request, res: Response, next: NextFu
 
 export const handleGoogleCallback = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { state, code, error, nonce } = req.query;
-
+    const { code, state, error } = req.query;
+    
     // Handle OAuth errors
     if (error) {
       console.error('Google OAuth error:', error);
-      return next(errorBuilders.badRequest(req, `OAuth authentication failed: ${error}`));
+      return next(errorBuilders.badRequest(req, `Google OAuth error: ${error}`));
     }
     
     // Validate required parameters
-    const missingParams = {
-      code: !code ? "Missing required query parameter: code" : null,
-      state: !state ? "Missing required query parameter: state" : null
-    };
-    
-    // Filter out null values
-    const missingDetails = Object.fromEntries(
-      Object.entries(missingParams).filter(([_, v]) => v !== null)
-    );
-    
-    // If any required parameters are missing, return validation error
-    if (Object.keys(missingDetails).length > 0) {
-      return next(errorBuilders.validationError(req, missingDetails));
+    if (!code) {
+      return next(errorBuilders.badRequest(req, 'Authorization code is required'));
     }
-
-    // Validate state token type
-    if (typeof state !== 'string') {
-      return next(errorBuilders.badRequest(req, 'Invalid state parameter type'));
-    }
-    
-    // Type check code parameter
-    if (typeof code !== 'string') {
-      return next(errorBuilders.badRequest(req, 'Invalid code parameter type'));
-    }
-
-    // Validate state token and nonce (if provided)
-    if (!validateStateToken(state, nonce as string)) {
-      console.error('Invalid or expired state token');
-      return next(errorBuilders.badRequest(req, 'Invalid state parameter (expired or tampered)'));
-    }
-
-    // Exchange authorization code for tokens
-    const client = getOAuthClient();
     
     try {
-      const { tokens } = await client.getToken(code);
-      client.setCredentials(tokens);
+      // Exchange code for tokens
+      const oauth2Client = getOAuthClient();
+      const { tokens } = await oauth2Client.getToken(code as string);
       
       if (!tokens.id_token) {
-        return next(errorBuilders.serverError(req, new Error('No ID token returned from Google')));
+        return next(errorBuilders.badRequest(req, 'No ID token returned from Google'));
       }
       
-      // Verify ID token and get user info
-      const { clientId } = getGoogleCredentials();
+      // Verify the ID token
+      const client = new OAuth2Client();
       const ticket = await client.verifyIdToken({
         idToken: tokens.id_token,
-        audience: clientId
+        audience: oauth2Client._clientId,
       });
       
-      const userPayload = ticket.getPayload() as TokenPayload;
-      if (!userPayload) {
-        return next(errorBuilders.serverError(req, new Error('Failed to parse ID token payload')));
-      }
+      const userPayload = ticket.getPayload();
       
-      if (!userPayload.email) {
-        return next(errorBuilders.badRequest(req, 'Email missing from OAuth response'));
-      }
-      
-      if (!userPayload.email_verified) {
-        return next(errorBuilders.badRequest(req, 'Email not verified with Google'));
+      if (!userPayload || !userPayload.email) {
+        return next(errorBuilders.badRequest(req, 'Invalid user data from Google'));
       }
       
       try {
@@ -142,7 +106,6 @@ export const handleGoogleCallback = async (req: Request, res: Response, next: Ne
           user = await queries.createUser(
             userPayload.email,
             null, // No password for Google users
-            userPayload.name || userPayload.email.split('@')[0],
             userPayload.sub, // Google ID
             userPayload.picture || undefined
           );
@@ -152,13 +115,11 @@ export const handleGoogleCallback = async (req: Request, res: Response, next: Ne
           // Update existing user's Google profile info if needed
           if (
             user.google_id !== userPayload.sub ||
-            user.name !== userPayload.name ||
             user.picture_url !== userPayload.picture
           ) {
             // Update user profile using queries
             await queries.updateUserProfile(user.id, {
               googleId: userPayload.sub,
-              name: userPayload.name || undefined,
               pictureUrl: userPayload.picture || undefined
             });
           }
@@ -167,7 +128,7 @@ export const handleGoogleCallback = async (req: Request, res: Response, next: Ne
 
         // Generate application tokens with required claims
         const [accessToken, refreshToken] = await Promise.all([
-          generateAccessToken(user.id, user.email, user.name, user.email_verified),
+          generateAccessToken(user.id, user.email, user.email_verified),
           generateRefreshToken(user.id)
         ]);
 
@@ -181,7 +142,6 @@ export const handleGoogleCallback = async (req: Request, res: Response, next: Ne
           user: {
             id: user.id,
             email: user.email,
-            name: user.name,
             picture: user.picture_url,
             firstLogin: isNewUser
           },

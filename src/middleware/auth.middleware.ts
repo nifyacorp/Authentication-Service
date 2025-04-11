@@ -36,7 +36,6 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     authReq.user = {
       id: decoded.sub as string,
       email: decoded.email as string,
-      name: decoded.name as string,
       email_verified: decoded.email_verified as boolean
     };
 
