@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { authService } from '../services/auth.service';
-import { formatErrorResponse } from '../errors/factory';
-import { AuthRequest, SignupBody, LoginBody, ChangePasswordBody } from '../models/types';
+import { authService } from '../services/auth.service.js';
+import { formatErrorResponse } from '../errors/factory.js';
+import { AuthRequest, SignupBody, LoginBody, ChangePasswordBody } from '../models/types.js';
 
 /**
  * User signup controller
@@ -78,7 +78,7 @@ export const getCurrentUser = async (req: AuthRequest, res: Response, next: Next
     res.json(profile);
   } catch (error) {
     // Error handling is centralized
-    const errorResponse = formatErrorResponse(req, error);
+    const errorResponse = formatErrorResponse(req as Request, error);
     res.status(errorResponse.status).json({ error: errorResponse });
   }
 };
@@ -102,7 +102,7 @@ export const changePassword = async (req: AuthRequest<{}, {}, ChangePasswordBody
     res.json(result);
   } catch (error) {
     // Error handling is centralized
-    const errorResponse = formatErrorResponse(req, error);
+    const errorResponse = formatErrorResponse(req as Request, error);
     res.status(errorResponse.status).json({ error: errorResponse });
   }
 }; 

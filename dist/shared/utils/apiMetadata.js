@@ -32,7 +32,7 @@ export const apiDefinitions = {
             "body_parameters": [
                 { "name": "email", "type": "string", "description": "User email", "required": true },
                 { "name": "password", "type": "string", "description": "User password", "required": true },
-                { "name": "name", "type": "string", "description": "User's full name", "required": true }
+                { "name": "name", "type": "string", "description": "User's full name (optional, will use email username if not provided)", "required": false }
             ],
             "responses": {
                 "201": {

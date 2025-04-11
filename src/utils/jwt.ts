@@ -1,4 +1,5 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
+import { StringValue } from 'ms';
 
 // JWT configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -34,6 +35,9 @@ export const generateAccessToken = async (
   name: string,
   emailVerified: boolean
 ): Promise<string> => {
+  const options: SignOptions = { };
+  options.expiresIn = JWT_EXPIRES_IN as any;
+  
   return jwt.sign(
     {
       sub: userId,
@@ -43,7 +47,7 @@ export const generateAccessToken = async (
       type: 'access'
     },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+    options
   );
 };
 
@@ -54,13 +58,16 @@ export const generateAccessToken = async (
  * @returns JWT refresh token
  */
 export const generateRefreshToken = async (userId: string): Promise<string> => {
+  const options: SignOptions = { };
+  options.expiresIn = REFRESH_TOKEN_EXPIRES_IN as any;
+  
   return jwt.sign(
     {
       sub: userId,
       type: 'refresh'
     },
     JWT_SECRET,
-    { expiresIn: REFRESH_TOKEN_EXPIRES_IN }
+    options
   );
 };
 

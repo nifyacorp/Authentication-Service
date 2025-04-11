@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { schemas } from './schemas';
-import { formatErrorResponse } from '../errors/factory';
-import { AuthErrorCode, AuthError } from '../errors/types';
+import { schemas } from './schemas.js';
+import { formatErrorResponse } from '../errors/factory.js';
+import { AuthErrorCode, AuthError } from '../errors/types.js';
 
 /**
  * Generic validation middleware factory

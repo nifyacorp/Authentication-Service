@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '../utils/jwt';
-import { AUTH_ERRORS } from '../auth/errors/factory';
-import { formatErrorResponse } from '../auth/errors/factory';
-import { AuthRequest } from '../auth/models/types';
+import { verifyToken } from '../utils/jwt.js';
+import { AUTH_ERRORS } from '../auth/errors/factory.js';
+import { formatErrorResponse } from '../auth/errors/factory.js';
+import { AuthRequest } from '../auth/models/types.js';
 
 /**
  * Authentication middleware
@@ -32,7 +32,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
 
     // Add user to request
-    (req as AuthRequest).user = {
+    const authReq = req as unknown as AuthRequest;
+    authReq.user = {
       id: decoded.sub as string,
       email: decoded.email as string,
       name: decoded.name as string,

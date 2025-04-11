@@ -95,7 +95,7 @@ export const authService = {
       const backendUrl = process.env.BACKEND_API_URL || 'https://backend-415554190254.us-central1.run.app';
       
       // Try to get API key from environment first
-      let apiKey = process.env.BACKEND_API_KEY;
+      let apiKey = process.env.BACKEND_API_KEY || '';
       
       // If not in env, try to get it from Secret Manager
       if (!apiKey) {
@@ -132,7 +132,7 @@ export const authService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': apiKey || '',
+          'X-API-Key': apiKey,
         },
         body: JSON.stringify({
           userId,
@@ -161,7 +161,7 @@ export const authService = {
     const user = await userRepository.findByEmail(email);
     
     if (!user) {
-      throw AUTH_ERRORS.INVALID_CREDENTIALS;
+      throw AUTH_ERRORS.USER_NOT_FOUND;
     }
     
     // Check if account is locked
@@ -190,7 +190,7 @@ export const authService = {
     const accessToken = await generateAccessToken(
       user.id, 
       user.email, 
-      user.name, 
+      user.name || '', 
       user.email_verified
     );
     
@@ -207,7 +207,7 @@ export const authService = {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
+        name: user.name || '',
         email_verified: user.email_verified
       }
     };
@@ -216,7 +216,7 @@ export const authService = {
   /**
    * Handle failed login attempt
    */
-  private async handleFailedLogin(user: User): Promise<void> {
+  async handleFailedLogin(user: User): Promise<void> {
     const loginAttempts = (user.login_attempts || 0) + 1;
     let lockUntil: Date | undefined;
     
@@ -266,7 +266,7 @@ export const authService = {
     const newAccessToken = await generateAccessToken(
       user.id, 
       user.email, 
-      user.name, 
+      user.name || '', 
       user.email_verified
     );
     
@@ -283,7 +283,7 @@ export const authService = {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
+        name: user.name || '',
         email_verified: user.email_verified
       }
     };
@@ -314,7 +314,7 @@ export const authService = {
     return {
       id: user.id,
       email: user.email,
-      name: user.name,
+      name: user.name || '',
       createdAt: user.created_at.toISOString(),
       emailVerified: user.email_verified,
       pictureUrl: user.picture_url,

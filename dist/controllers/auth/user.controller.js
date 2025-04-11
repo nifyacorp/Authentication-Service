@@ -84,9 +84,19 @@ export const login = async (req, res, next) => {
 export const signup = async (req, res, next) => {
     try {
         console.log('Processing signup request');
-        const { email, password, name } = req.body;
+        const { email, password, name = '' } = req.body;
+        // Extract username from email (part before @)
+        let extractedName = email.split('@')[0];
+        // Sanitize the extracted name to only include allowed characters
+        extractedName = extractedName.replace(/[^A-Za-z0-9._\s]/g, '');
+        // Ensure it's at least 2 characters (minimum required by validation)
+        if (extractedName.length < 2) {
+            extractedName = extractedName.padEnd(2, 'x');
+        }
+        // Use the extracted name if no name is provided
+        const userName = name || extractedName;
         try {
-            signupSchema.parse({ email, password, name });
+            signupSchema.parse({ email, password, name: userName });
         }
         catch (error) {
             if (error instanceof z.ZodError) {
@@ -106,7 +116,7 @@ export const signup = async (req, res, next) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
         // Create user in database
-        const user = await queries.createUser(email, hashedPassword, name);
+        const user = await queries.createUser(email, hashedPassword, userName);
         console.log('User created successfully:', user.id);
         // Return success response
         res.status(201).json({

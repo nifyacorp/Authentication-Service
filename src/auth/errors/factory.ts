@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { AuthError, AuthErrorCode, ErrorResponse } from './types';
+import { AuthError, AuthErrorCode, ErrorResponse } from './types.js';
 import { ZodError } from 'zod';
 
 /**
@@ -55,6 +55,15 @@ const buildHelpInfo = (req: Request, code: string): ErrorResponse['help'] => {
           path: '/api/auth/forgot-password',
           methods: ['POST'],
           description: 'Reset password for existing account'
+        }
+      ];
+      break;
+    case AuthErrorCode.USER_NOT_FOUND:
+      help.related_endpoints = [
+        {
+          path: '/api/auth/signup',
+          methods: ['POST'],
+          description: 'Create a new account'
         }
       ];
       break;
@@ -118,10 +127,10 @@ export const formatErrorResponse = (req: Request, error: unknown): ErrorResponse
   }
   
   // Generic error handling
-  const message = error instanceof Error ? error.message : 'Internal server error';
+  const errorMessage = error instanceof Error ? error.message : 'Internal server error';
   const authError = new AuthError(
     AuthErrorCode.SERVER_ERROR,
-    message,
+    errorMessage,
     500
   );
   
@@ -184,11 +193,11 @@ export const AUTH_ERRORS = {
     404
   ),
   
-  SERVER_ERROR: (error: Error) => createError(
+  SERVER_ERROR: (error: unknown) => createError(
     AuthErrorCode.SERVER_ERROR, 
     'An unexpected error occurred', 
     500,
-    { originalError: error.message }
+    { originalError: error instanceof Error ? error.message : 'Unknown error' }
   ),
   
   TOO_MANY_REQUESTS: (retryAfter: number) => createError(
@@ -202,5 +211,11 @@ export const AUTH_ERRORS = {
     AuthErrorCode.INVALID_LOGIN_METHOD, 
     'This account uses a different login method', 
     400
+  ),
+  
+  USER_NOT_FOUND: createError(
+    AuthErrorCode.USER_NOT_FOUND,
+    'No user account exists with this email', 
+    404
   )
 }; 

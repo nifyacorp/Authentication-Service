@@ -125,7 +125,7 @@ export const handleGoogleCallback = async (req, res, next) => {
                 // Generate application tokens with required claims
                 const [accessToken, refreshToken] = await Promise.all([
                     generateAccessToken(user.id, user.email, user.name, user.email_verified),
-                    generateRefreshToken(user.id, user.email)
+                    generateRefreshToken(user.id)
                 ]);
                 // Store refresh token
                 const expiresAt = new Date();

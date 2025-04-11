@@ -1,15 +1,24 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import apiRoutes from './api/routes';
-import { initializeDatabase } from './database/client';
-import { formatErrorResponse } from './auth/errors/factory';
+import apiRoutes from './api/routes.js';
+import { initializeDatabase } from './database/client.js';
+import { formatErrorResponse } from './auth/errors/factory.js';
 
 // Load environment variables
 const PORT = process.env.PORT || 8080;
 const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || 'localhost,127.0.0.1')
   .split(',')
   .map(origin => origin.trim());
+
+// Log runtime configuration
+console.log('Runtime config loaded:', {
+  AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || 'https://authentication-service-415554190254.us-central1.run.app',
+  BACKEND_SERVICE_URL: process.env.BACKEND_SERVICE_URL || 'https://backend-415554190254.us-central1.run.app',
+  NODE_ENV: process.env.NODE_ENV || 'production',
+  REACT_APP_ENV: process.env.REACT_APP_ENV || 'production',
+  USE_NETLIFY_REDIRECTS: false
+});
 
 // Initialize Express app
 const app = express();

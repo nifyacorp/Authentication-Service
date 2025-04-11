@@ -40,7 +40,7 @@ const testAccountMiddleware = async (
     const testUserId = '1';
     const [accessToken, refreshToken] = await Promise.all([
       generateAccessToken(testUserId, req.body.email, 'NIFYA Test User', true),
-      generateRefreshToken(testUserId, req.body.email)
+      generateRefreshToken(testUserId)
     ]);
     
     // Return success response for test account
@@ -102,8 +102,7 @@ if (process.env.NODE_ENV === 'development') {
       );
       
       const refreshToken = await generateRefreshToken(
-        mockUser.id,
-        mockUser.email
+        mockUser.id
       );
       
       res.json({
@@ -127,7 +126,7 @@ authRouter.get('/debug/tokens', async (req: Request, res: Response) => {
     const emailVerified = req.query.emailVerified === 'true';
     
     const accessToken = await generateAccessToken(userId, email, name, emailVerified);
-    const refreshToken = await generateRefreshToken(userId, email);
+    const refreshToken = await generateRefreshToken(userId);
     
     res.json({
       accessToken,

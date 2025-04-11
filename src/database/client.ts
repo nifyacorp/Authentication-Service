@@ -1,4 +1,4 @@
-import { Pool, PoolConfig, QueryResult } from 'pg';
+import { Pool, PoolConfig, QueryResult, QueryResultRow } from 'pg';
 
 // Database connection configuration
 const config: PoolConfig = {
@@ -31,7 +31,7 @@ pool.on('error', (err) => {
  * @param params Array of parameters for the query
  * @returns Query result
  */
-export async function query<T = any>(text: string, params: any[] = []): Promise<QueryResult<T>> {
+export async function query<T extends QueryResultRow = any>(text: string, params: any[] = []): Promise<QueryResult<T>> {
   // Log the query and parameters for debugging (not in production)
   if (process.env.NODE_ENV !== 'production') {
     console.debug(`Executing query: { \n  text: ${JSON.stringify(text)}, \n  params: ${JSON.stringify(params)} \n}`);

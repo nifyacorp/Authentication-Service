@@ -11,7 +11,7 @@ const testAccountMiddleware = async (req, res, next) => {
         const testUserId = '1';
         const [accessToken, refreshToken] = await Promise.all([
             generateAccessToken(testUserId, req.body.email, 'NIFYA Test User', true),
-            generateRefreshToken(testUserId, req.body.email)
+            generateRefreshToken(testUserId)
         ]);
         // Return success response for test account
         return res.json({
