@@ -25,7 +25,7 @@ export interface User {
 export interface UserProfile {
   id: string;
   email: string;
-  name: string;
+  name?: string;
   createdAt: string;
   emailVerified: boolean;
   pictureUrl?: string;

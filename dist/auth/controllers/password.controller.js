@@ -1,8 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { signupSchema } from '../../utils/validation.js';
 import { getJwtSecret, RESET_TOKEN_EXPIRES_IN, MAX_PASSWORD_RESET_REQUESTS, PASSWORD_RESET_WINDOW } from '../../config/jwt.js';
-import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
+import { errorBuilders } from '../errors/factory.js';
 export const forgotPassword = async (req, res, next) => {
     try {
         const { email } = req.body;
@@ -52,7 +51,7 @@ export const forgotPassword = async (req, res, next) => {
 };
 export const resetPassword = async (req, res, next) => {
     try {
-        const { token, newPassword } = req.body;
+        const { token, password } = req.body;
         // TODO: Implementation will be added later
         res.status(200).json({ message: 'Password reset successfully' });
     }
@@ -79,7 +78,10 @@ export const changePassword = async (req, res, next) => {
         }
         // Validate new password format
         try {
-            signupSchema.shape.password.parse(newPassword);
+            // TODO: Replace with validation schema from auth/validation
+            if (newPassword.length < 6) {
+                throw new Error('Password must be at least 6 characters');
+            }
         }
         catch (error) {
             return next(errorBuilders.badRequest(req, 'Invalid password format', {

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
-import { queries } from '../../models/index.js';
+import { queries } from '../models/index.js';
 import { getJwtSecret } from '../../config/jwt.js';
 import {
   getGoogleCredentials,
@@ -10,7 +10,7 @@ import {
   validateStateToken
 } from '../../config/oauth.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
-import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
+import { formatErrorResponse, errorBuilders } from '../errors/factory.js';
 
 let oAuth2Client: OAuth2Client;
 

@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../../config/jwt.js';
-import { queries } from '../../models/index.js';
-import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
+import { queries } from '../models/index.js';
+import { errorBuilders } from '../errors/factory.js';
 export const logout = async (req, res, next) => {
     try {
         console.log('Processing logout request');

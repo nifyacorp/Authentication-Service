@@ -1,4 +1,4 @@
-import { errorBuilders } from '../../../shared/errors/ErrorResponseBuilder.js';
+import { errorBuilders } from '../../../auth/errors/factory.js';
 import { ZodError } from 'zod';
 /**
  * Global error handling middleware that transforms errors into self-documenting responses
@@ -14,44 +14,44 @@ export function errorHandler(err, req, res, next) {
             const field = error.path.join('.');
             details[field] = error.message;
         });
-        const { statusCode, body } = errorBuilders.validationError(req, details);
-        return res.status(statusCode).json(body);
+        const errorResponse = errorBuilders.validationError(req, details);
+        return res.status(errorResponse.status).json(errorResponse);
     }
     if (err.name === 'UnauthorizedError' || err.message === 'jwt expired') {
         // Handle JWT authentication errors
-        const { statusCode, body } = errorBuilders.unauthorized(req, 'Authentication token is invalid or expired');
-        return res.status(statusCode).json(body);
+        const errorResponse = errorBuilders.unauthorized(req, 'Authentication token is invalid or expired');
+        return res.status(errorResponse.status).json(errorResponse);
     }
     if (err.statusCode === 404 || err.name === 'NotFoundError') {
         // Handle not found errors
-        const { statusCode, body } = errorBuilders.notFound(req, err.resource || 'Resource');
-        return res.status(statusCode).json(body);
+        const errorResponse = errorBuilders.notFound(req, err.resource || 'Resource');
+        return res.status(errorResponse.status).json(errorResponse);
     }
     if (err.statusCode === 403 || err.name === 'ForbiddenError') {
         // Handle forbidden errors
-        const { statusCode, body } = errorBuilders.forbidden(req);
-        return res.status(statusCode).json(body);
+        const errorResponse = errorBuilders.forbidden(req);
+        return res.status(errorResponse.status).json(errorResponse);
     }
     if (err.code === 'ACCOUNT_LOCKED') {
         // Handle account locked errors
-        const { statusCode, body } = errorBuilders.accountLocked(req, err.lockExpires);
-        return res.status(statusCode).json(body);
+        const errorResponse = errorBuilders.accountLocked(req, err.lockExpires);
+        return res.status(errorResponse.status).json(errorResponse);
     }
     if (err.code === 'INVALID_LOGIN_METHOD') {
         // Handle invalid login method errors
-        const { statusCode, body } = errorBuilders.invalidLoginMethod(req);
-        return res.status(statusCode).json(body);
+        const errorResponse = errorBuilders.invalidLoginMethod(req);
+        return res.status(errorResponse.status).json(errorResponse);
     }
     if (err.code === 'INVALID_TOKEN') {
         // Handle invalid token errors
-        const { statusCode, body } = errorBuilders.invalidToken(req, err.tokenType || 'token');
-        return res.status(statusCode).json(body);
+        const errorResponse = errorBuilders.invalidToken(req, err.tokenType || 'token');
+        return res.status(errorResponse.status).json(errorResponse);
     }
-    // If the error already has a statusCode and body from our error builders
-    if (err.statusCode && err.body) {
-        return res.status(err.statusCode).json(err.body);
+    // If the error already has a status and can be sent directly
+    if (err.status && typeof err.toJSON === 'function') {
+        return res.status(err.status).json(err.toJSON());
     }
     // Default to server error for unhandled errors
-    const { statusCode, body } = errorBuilders.serverError(req, err);
-    return res.status(statusCode).json(body);
+    const errorResponse = errorBuilders.serverError(req, err);
+    return res.status(errorResponse.status).json(errorResponse);
 }

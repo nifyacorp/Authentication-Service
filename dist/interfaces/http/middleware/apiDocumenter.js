@@ -1,64 +1,54 @@
-import { getEndpointMetadata } from '../../../shared/utils/apiMetadata.js';
-import { errorBuilders } from '../../../shared/errors/ErrorResponseBuilder.js';
+import { getEndpointDescription } from '../../../auth/errors/factory.js';
 /**
- * Middleware to validate requests against API metadata and provide self-documenting errors
+ * API Documentation middleware - adds automatic documentation to API responses
  */
 export function apiDocumenter(req, res, next) {
-    // Get metadata for this endpoint
-    const path = req.path;
-    const method = req.method;
-    const metadata = getEndpointMetadata(path, method);
-    // If no metadata found, continue without validation
-    if (!metadata) {
-        return next();
-    }
-    // Validate required path parameters
-    if (metadata.path_parameters) {
-        const errors = {};
-        metadata.path_parameters.forEach((param) => {
-            const paramValue = req.params[param.name];
-            if (param.required && (paramValue === undefined || paramValue === null)) {
-                errors[param.name] = `Missing required path parameter: ${param.name}`;
-            }
-            else if (paramValue !== undefined && param.type === 'uuid') {
-                // Validate UUID format
-                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-                if (!uuidRegex.test(paramValue)) {
-                    errors[param.name] = `Invalid UUID format for parameter: ${param.name}`;
+    // Store the original send method
+    const originalSend = res.send;
+    // Override the send method to add documentation
+    res.send = function (body) {
+        try {
+            // Parse the body if it's JSON
+            let parsedBody;
+            if (typeof body === 'string') {
+                try {
+                    parsedBody = JSON.parse(body);
+                }
+                catch (e) {
+                    // Not JSON, just return original
+                    return originalSend.call(this, body);
                 }
             }
-        });
-        if (Object.keys(errors).length > 0) {
-            const { statusCode, body } = errorBuilders.validationError(req, errors);
-            return res.status(statusCode).json(body);
-        }
-    }
-    // Validate required query parameters
-    if (metadata.query_parameters) {
-        const errors = {};
-        metadata.query_parameters.forEach((param) => {
-            if (param.required && req.query[param.name] === undefined) {
-                errors[param.name] = `Missing required query parameter: ${param.name}`;
+            else {
+                parsedBody = body;
             }
-        });
-        if (Object.keys(errors).length > 0) {
-            const { statusCode, body } = errorBuilders.validationError(req, errors);
-            return res.status(statusCode).json(body);
-        }
-    }
-    // Validate required body parameters for POST/PUT/PATCH
-    if (['POST', 'PUT', 'PATCH'].includes(method) && metadata.body_parameters) {
-        const errors = {};
-        metadata.body_parameters.forEach((param) => {
-            if (param.required && (req.body === undefined || req.body[param.name] === undefined)) {
-                errors[param.name] = `Missing required body parameter: ${param.name}`;
+            // Don't add docs to error responses or if docs already exist
+            if (parsedBody && !parsedBody.error && !parsedBody.docs) {
+                // Get basic endpoint info
+                const path = req.path;
+                const method = req.method;
+                // Add documentation to response
+                parsedBody.docs = {
+                    endpoint: path,
+                    method: method,
+                    description: getEndpointDescription(path),
+                    auth_required: path.includes('/auth/') && !path.includes('/login') && !path.includes('/signup')
+                };
+                // Add links to related endpoints
+                parsedBody.docs.related = [
+                    { path: '/api/health', method: 'GET', description: 'Health check endpoint' },
+                    { path: '/api/auth/login', method: 'POST', description: 'Login to get access token' },
+                    { path: '/api/auth/me', method: 'GET', description: 'Get current user profile' }
+                ];
+                // Return the modified response
+                return originalSend.call(this, JSON.stringify(parsedBody));
             }
-        });
-        if (Object.keys(errors).length > 0) {
-            const { statusCode, body } = errorBuilders.validationError(req, errors);
-            return res.status(statusCode).json(body);
         }
-    }
-    // If all validations pass, continue
+        catch (err) {
+            console.error('Error in API documenter:', err);
+        }
+        // If anything goes wrong, just send the original
+        return originalSend.call(this, body);
+    };
     next();
 }

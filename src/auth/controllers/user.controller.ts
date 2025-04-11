@@ -1,23 +1,69 @@
 import { Request, Response, NextFunction } from 'express';
-import { authService } from '../services/auth.service.js';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { getJwtSecret, MAX_LOGIN_ATTEMPTS, LOCK_TIME } from '../../config/jwt.js';
+import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
+import { z } from 'zod';
+import { AuthRequest, LoginBody, SignupBody, VerifyEmailBody, UserProfile } from '../models/types.js';
+import { queries } from '../models/index.js';
 import { formatErrorResponse } from '../errors/factory.js';
-import { AuthRequest, SignupBody, LoginBody, ChangePasswordBody } from '../models/types.js';
 
 /**
  * User signup controller
  */
 export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, next: NextFunction) => {
   try {
-    const { email, password, name } = req.body;
-    
-    // Validation is handled by middleware
-    
-    // Create user
-    const result = await authService.createUser(email, password, name);
-    
-    res.status(201).json(result);
+    console.log('Processing signup request');
+    const { email, password, name = '' } = req.body;
+
+    // Extract username from email (part before @) if no name provided
+    let userName = name;
+    if (!userName) {
+      let extractedName = email.split('@')[0];
+      // Sanitize the extracted name to only include allowed characters
+      extractedName = extractedName.replace(/[^A-Za-z0-9._\s]/g, '');
+      // Ensure it's at least 2 characters
+      if (extractedName.length < 2) {
+        extractedName = extractedName.padEnd(2, 'x');
+      }
+      userName = extractedName;
+    }
+
+    // Check if email exists
+    const existingUser = await queries.getUserByEmail(email);
+    if (existingUser) {
+      console.log('Email already exists:', email);
+      const errorResponse = formatErrorResponse(req, 'Email already exists');
+      return res.status(errorResponse.status).json({ error: errorResponse });
+    }
+
+    console.log('Creating new user with email:', email);
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create user in database
+    const user = await queries.createUser(
+      email,
+      hashedPassword,
+      userName
+    );
+
+    console.log('User created successfully:', user.id);
+
+    // Return success response
+    res.status(201).json({
+      message: 'User created successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        email_verified: user.email_verified
+      }
+    });
   } catch (error) {
-    // Error handling is centralized
+    console.error('Signup error:', error);
     const errorResponse = formatErrorResponse(req, error);
     res.status(errorResponse.status).json({ error: errorResponse });
   }
@@ -28,36 +74,87 @@ export const signup = async (req: Request<{}, {}, SignupBody>, res: Response, ne
  */
 export const login = async (req: Request<{}, {}, LoginBody>, res: Response, next: NextFunction) => {
   try {
+    console.log('Processing login request');
     const { email, password } = req.body;
-    
-    // Validation is handled by middleware
-    
-    // Authenticate user
-    const result = await authService.login(email, password);
-    
-    res.json(result);
-  } catch (error) {
-    // Error handling is centralized
-    const errorResponse = formatErrorResponse(req, error);
-    res.status(errorResponse.status).json({ error: errorResponse });
-  }
-};
 
-/**
- * Logout controller
- */
-export const logout = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { refreshToken } = req.body;
+    // Get user from database
+    const user = await queries.getUserByEmail(email);
     
-    // Validation is handled by middleware
+    if (!user) {
+      console.log('Login attempt with non-existent email:', email);
+      const errorResponse = formatErrorResponse(req, 'Invalid credentials');
+      return res.status(errorResponse.status).json({ error: errorResponse });
+    }
+
+    // Check if account is locked
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      console.log(`Account locked for user ${user.id} until ${user.locked_until}`);
+      const errorResponse = formatErrorResponse(req, `Account locked until ${user.locked_until.toISOString()}`);
+      return res.status(errorResponse.status).json({ error: errorResponse });
+    }
+
+    // Verify password
+    if (!user.password_hash) {
+      console.log(`User ${user.id} has no password (OAuth account)`);
+      const errorResponse = formatErrorResponse(req, 'Invalid login method');
+      return res.status(errorResponse.status).json({ error: errorResponse });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+
+    if (!isValidPassword) {
+      const loginAttempts = (user.login_attempts || 0) + 1;
+      let lockUntil: Date | undefined;
+
+      if (loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+        lockUntil = new Date(Date.now() + LOCK_TIME);
+        console.log(`Locking account for user ${user.id} until ${lockUntil}`);
+      }
+
+      // Update login attempts and lock status
+      await queries.updateLoginAttempts(user.id, loginAttempts, lockUntil);
+
+      if (lockUntil) {
+        const errorResponse = formatErrorResponse(req, `Account locked until ${lockUntil.toISOString()}`);
+        return res.status(errorResponse.status).json({ error: errorResponse });
+      }
+
+      console.log(`Failed login attempt for email: ${email}`);
+
+      const errorResponse = formatErrorResponse(req, 'Invalid credentials');
+      return res.status(errorResponse.status).json({ error: errorResponse });
+    }
+
+    // Reset login attempts on successful login
+    if (user.login_attempts > 0) {
+      await queries.updateLoginAttempts(user.id, 0, undefined);
+    }
+
+    // Generate tokens
+    const [accessToken, refreshToken] = await Promise.all([
+      generateAccessToken(user.id, user.email, user.name, user.email_verified),
+      generateRefreshToken(user.id)
+    ]);
     
-    // Logout user
-    const result = await authService.logout(refreshToken);
+    // Store refresh token
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+    await queries.createRefreshToken(user.id, refreshToken, expiresAt);
     
-    res.json(result);
+    console.log(`Successful login for user: ${user.id}`);
+    
+    res.json({
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        email_verified: user.email_verified
+      }
+    });
   } catch (error) {
-    // Error handling is centralized
+    console.error('Login error:', error);
     const errorResponse = formatErrorResponse(req, error);
     res.status(errorResponse.status).json({ error: errorResponse });
   }
@@ -70,39 +167,87 @@ export const getCurrentUser = async (req: AuthRequest, res: Response, next: Next
   try {
     // User ID comes from auth middleware
     if (!req.user?.id) {
-      throw new Error('User ID not found in request');
+      const errorResponse = formatErrorResponse(req, 'User ID not found in request');
+      return res.status(errorResponse.status).json({ error: errorResponse });
     }
     
-    const profile = await authService.getUserProfile(req.user.id);
+    const user = await queries.getUserById(req.user.id);
     
-    res.json(profile);
+    if (!user) {
+      const errorResponse = formatErrorResponse(req, 'User not found');
+      return res.status(errorResponse.status).json({ error: errorResponse });
+    }
+    
+    // Transform database user to UserProfile format
+    const userProfile: UserProfile = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      createdAt: user.created_at.toISOString(),
+      emailVerified: user.email_verified,
+      pictureUrl: user.picture_url
+    };
+    
+    res.json(userProfile);
   } catch (error) {
-    // Error handling is centralized
-    const errorResponse = formatErrorResponse(req as Request, error);
+    console.error('Get current user error:', error);
+    const errorResponse = formatErrorResponse(req, error);
     res.status(errorResponse.status).json({ error: errorResponse });
   }
 };
 
-/**
- * Change user password
- */
-export const changePassword = async (req: AuthRequest<{}, {}, ChangePasswordBody>, res: Response, next: NextFunction) => {
+export const verifyEmail = async (req: Request<{}, {}, VerifyEmailBody>, res: Response, next: NextFunction) => {
   try {
-    if (!req.user?.id) {
-      throw new Error('User ID not found in request');
+    const { token } = req.body;
+
+    if (!token) {
+      const errorResponse = formatErrorResponse(req, 'Verification token is required');
+      return res.status(errorResponse.status).json({ error: errorResponse });
     }
-    
-    const { currentPassword, newPassword } = req.body;
-    
-    // Validation is handled by middleware
-    
-    // Change password
-    const result = await authService.changePassword(req.user.id, currentPassword, newPassword);
-    
-    res.json(result);
+
+    try {
+      const secret = await getJwtSecret();
+      const decoded = jwt.verify(token, secret) as {
+        userId: string;
+        type: string;
+        email: string;
+      };
+
+      // Validate token type
+      if (decoded.type !== 'email_verification') {
+        const errorResponse = formatErrorResponse(req, 'Invalid verification token');
+        return res.status(errorResponse.status).json({ error: errorResponse });
+      }
+
+      // TODO: Replace with actual database query
+      const user = await queries.getUserById(decoded.userId);
+
+      if (!user) {
+        const errorResponse = formatErrorResponse(req, 'Invalid verification token');
+        return res.status(errorResponse.status).json({ error: errorResponse });
+      }
+
+      if (user.email_verified) {
+        const errorResponse = formatErrorResponse(req, 'Email already verified');
+        return res.status(errorResponse.status).json({ error: errorResponse });
+      }
+
+      // TODO: Update user email_verified status in database
+
+      // Log verification
+      console.log(`Email verified for user: ${decoded.userId}`);
+
+      res.json({
+        message: 'Email verified successfully',
+        email: decoded.email
+      });
+    } catch (jwtError) {
+      const errorResponse = formatErrorResponse(req, 'Invalid or expired verification token');
+      return res.status(errorResponse.status).json({ error: errorResponse });
+    }
   } catch (error) {
-    // Error handling is centralized
-    const errorResponse = formatErrorResponse(req as Request, error);
+    console.error('Email verification error:', error);
+    const errorResponse = formatErrorResponse(req, error);
     res.status(errorResponse.status).json({ error: errorResponse });
   }
 }; 

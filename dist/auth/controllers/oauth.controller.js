@@ -1,8 +1,8 @@
 import { OAuth2Client } from 'google-auth-library';
-import { queries } from '../../models/index.js';
+import { queries } from '../models/index.js';
 import { getGoogleCredentials, GOOGLE_REDIRECT_URI, GOOGLE_SCOPES, generateStateToken, validateStateToken } from '../../config/oauth.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
-import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
+import { errorBuilders } from '../errors/factory.js';
 let oAuth2Client;
 function getOAuthClient() {
     if (!oAuth2Client) {

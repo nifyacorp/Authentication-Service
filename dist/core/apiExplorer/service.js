@@ -1,4 +1,4 @@
-import { getAllEndpoints, getEndpointMetadata, findRelatedEndpoints } from '../../shared/utils/apiMetadata.js';
+import { getAllEndpoints, getEndpointMetadata, findRelatedEndpoints } from '../../auth/errors/factory.js';
 /**
  * API Explorer service provides endpoints for API discovery and documentation
  */
@@ -69,3 +69,28 @@ function formatUptime(seconds) {
     seconds -= minutes * 60;
     return `${days}d ${hours}h ${minutes}m ${Math.floor(seconds)}s`;
 }
+// Mock implementation for now, can be enhanced to provide real API exploration
+export const getApiExplorer = async () => {
+    return {
+        title: 'Authentication Service API Explorer',
+        version: '1.0',
+        description: 'Explore the authentication service API endpoints',
+        endpoints: getAllEndpoints()
+    };
+};
+export const getEndpointDetails = async (path, method = 'GET') => {
+    const endpointInfo = getEndpointMetadata(path, method);
+    if (!endpointInfo) {
+        return {
+            error: {
+                status: 404,
+                message: `Endpoint not found: ${method} ${path}`,
+                relatedEndpoints: findRelatedEndpoints(path)
+            }
+        };
+    }
+    return {
+        ...endpointInfo,
+        relatedEndpoints: findRelatedEndpoints(path)
+    };
+};

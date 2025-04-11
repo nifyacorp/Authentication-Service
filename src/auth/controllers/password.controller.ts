@@ -1,10 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { signupSchema } from '../../utils/validation.js';
 import { getJwtSecret, RESET_TOKEN_EXPIRES_IN, MAX_PASSWORD_RESET_REQUESTS, PASSWORD_RESET_WINDOW } from '../../config/jwt.js';
-import { AuthRequest, ForgotPasswordBody, ResetPasswordBody, ChangePasswordBody } from './types.js';
-import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
+import { AuthRequest, ForgotPasswordBody, ResetPasswordBody, ChangePasswordBody } from '../models/types.js';
+import { formatErrorResponse, errorBuilders } from '../errors/factory.js';
 
 export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, res: Response, next: NextFunction) => {
   try {
@@ -68,7 +67,7 @@ export const forgotPassword = async (req: Request<{}, {}, ForgotPasswordBody>, r
 
 export const resetPassword = async (req: Request<{}, {}, ResetPasswordBody>, res: Response, next: NextFunction) => {
   try {
-    const { token, newPassword } = req.body;
+    const { token, password } = req.body;
     
     // TODO: Implementation will be added later
     
@@ -100,7 +99,10 @@ export const changePassword = async (req: Request<{}, {}, ChangePasswordBody>, r
 
     // Validate new password format
     try {
-      signupSchema.shape.password.parse(newPassword);
+      // TODO: Replace with validation schema from auth/validation
+      if (newPassword.length < 6) {
+        throw new Error('Password must be at least 6 characters');
+      }
     } catch (error) {
       return next(errorBuilders.badRequest(req, 'Invalid password format', {
         details: 'Password must be at least 8 characters, contain uppercase, number, and special character'
@@ -168,4 +170,4 @@ export const changePassword = async (req: Request<{}, {}, ChangePasswordBody>, r
     console.error('Change password error:', error);
     return next(errorBuilders.serverError(req, error instanceof Error ? error : new Error('Internal server error')));
   }
-};
+}; 

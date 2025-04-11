@@ -2,9 +2,9 @@ import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../../config/jwt.js';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
-import { queries } from '../../models/index.js';
-import { AuthRequest, RefreshTokenBody } from './types.js';
-import { errorBuilders } from '../../shared/errors/ErrorResponseBuilder.js';
+import { queries } from '../models/index.js';
+import { AuthRequest, RefreshTokenBody } from '../models/types.js';
+import { formatErrorResponse, errorBuilders } from '../errors/factory.js';
 
 export const logout = async (req: AuthRequest<any, any, RefreshTokenBody>, res: Response, next: NextFunction) => {
   try {
@@ -242,4 +242,4 @@ export const getSession = async (req: AuthRequest, res: Response, next: NextFunc
       error: 'Server error'
     });
   }
-};
+}; 

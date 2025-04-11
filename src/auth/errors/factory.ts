@@ -3,12 +3,79 @@ import { AuthError, AuthErrorCode, ErrorResponse } from './types.js';
 import { ZodError } from 'zod';
 
 /**
+ * Get all available API endpoints with metadata
+ */
+export const getAllEndpoints = () => {
+  return [
+    { path: '/api/health', method: 'GET', description: 'Health check endpoint' },
+    { path: '/api/auth/signup', method: 'POST', description: 'Register a new user account' },
+    { path: '/api/auth/login', method: 'POST', description: 'Authenticate and get JWT tokens' },
+    { path: '/api/auth/refresh', method: 'POST', description: 'Refresh expired JWT token' },
+    { path: '/api/auth/logout', method: 'POST', description: 'Invalidate current session' },
+    { path: '/api/auth/me', method: 'GET', description: 'Get current user profile' },
+    { path: '/api/auth/change-password', method: 'POST', description: 'Change user password' },
+    { path: '/api/auth/forgot-password', method: 'POST', description: 'Request password reset' },
+    { path: '/api/auth/reset-password', method: 'POST', description: 'Reset password with token' },
+    { path: '/api/auth/verify-email', method: 'POST', description: 'Verify email address' },
+    { path: '/api/auth/google/login', method: 'POST', description: 'Login with Google OAuth' },
+    { path: '/api/auth/google/callback', method: 'GET', description: 'Google OAuth callback' },
+    { path: '/api/auth/revoke-all-sessions', method: 'POST', description: 'Revoke all user sessions' },
+    { path: '/api/auth/session', method: 'GET', description: 'Get current session info' }
+  ];
+};
+
+/**
+ * Get metadata for a specific endpoint
+ */
+export const getEndpointMetadata = (path: string, method: string) => {
+  const endpoints = getAllEndpoints();
+  return endpoints.find(endpoint => endpoint.path === path && endpoint.method === method);
+};
+
+/**
  * Build API documentation links based on the endpoint
  */
 const getApiDocsLink = (endpoint: string): string => {
   // Strip any path parameters
   const basePath = endpoint.split('?')[0].replace(/\/:[^/]+/g, '/{id}');
   return `https://docs.nifya.app/api${basePath}`;
+};
+
+/**
+ * Find related endpoints for a given path
+ */
+export const findRelatedEndpoints = (path: string) => {
+  // Simple implementation - can be enhanced for better recommendations
+  const authEndpoints = [
+    {
+      path: '/api/auth/login',
+      methods: ['POST'],
+      description: 'Authenticate and get JWT tokens'
+    },
+    {
+      path: '/api/auth/signup',
+      methods: ['POST'],
+      description: 'Register a new user account'
+    },
+    {
+      path: '/api/auth/logout',
+      methods: ['POST'],
+      description: 'Invalidate current session'
+    },
+    {
+      path: '/api/auth/refresh',
+      methods: ['POST'],
+      description: 'Refresh expired JWT token'
+    },
+    {
+      path: '/api/auth/me',
+      methods: ['GET'],
+      description: 'Get current user profile'
+    }
+  ];
+  
+  // Return endpoints excluding the current one
+  return authEndpoints.filter(endpoint => endpoint.path !== path);
 };
 
 /**
@@ -76,13 +143,21 @@ const buildHelpInfo = (req: Request, code: string): ErrorResponse['help'] => {
 /**
  * Get a user-friendly description of an endpoint
  */
-const getEndpointDescription = (endpoint: string): string => {
+export const getEndpointDescription = (endpoint: string): string => {
   const endpointMap: Record<string, string> = {
     '/api/auth/signup': 'Register a new user account',
     '/api/auth/login': 'Authenticate and get JWT tokens',
     '/api/auth/refresh': 'Refresh expired JWT token',
     '/api/auth/logout': 'Invalidate current session',
-    '/api/auth/me': 'Get current user profile'
+    '/api/auth/me': 'Get current user profile',
+    '/api/auth/change-password': 'Change user password',
+    '/api/auth/forgot-password': 'Request password reset',
+    '/api/auth/reset-password': 'Reset password with token',
+    '/api/auth/verify-email': 'Verify email address',
+    '/api/auth/google/login': 'Login with Google OAuth',
+    '/api/auth/google/callback': 'Google OAuth callback',
+    '/api/auth/revoke-all-sessions': 'Revoke all user sessions',
+    '/api/auth/session': 'Get current session info'
     // Add more as needed
   };
 
@@ -218,4 +293,73 @@ export const AUTH_ERRORS = {
     'No user account exists with this email', 
     404
   )
+};
+
+/**
+ * Error builders for external use
+ */
+export const errorBuilders = {
+  badRequest: (req: Request, message: string, details?: unknown) => {
+    const error = createError(AuthErrorCode.BAD_REQUEST, message, 400, details);
+    return formatErrorResponse(req, error);
+  },
+  
+  unauthorized: (req: Request, message = 'Authentication required') => {
+    const error = createError(AuthErrorCode.UNAUTHORIZED, message, 401);
+    return formatErrorResponse(req, error);
+  },
+  
+  forbidden: (req: Request, message = 'Permission denied') => {
+    const error = createError(AuthErrorCode.FORBIDDEN, message, 403);
+    return formatErrorResponse(req, error);
+  },
+  
+  notFound: (req: Request, resource = 'Resource') => {
+    const error = createError(AuthErrorCode.NOT_FOUND, `${resource} not found`, 404);
+    return formatErrorResponse(req, error);
+  },
+  
+  validationError: (req: Request, details: unknown) => {
+    const error = createError(AuthErrorCode.VALIDATION_ERROR, 'Validation failed', 400, details);
+    return formatErrorResponse(req, error);
+  },
+  
+  serverError: (req: Request, originalError: unknown) => {
+    const message = originalError instanceof Error ? originalError.message : 'Internal server error';
+    const error = createError(AuthErrorCode.SERVER_ERROR, message, 500, { originalError });
+    return formatErrorResponse(req, error);
+  },
+  
+  tooManyRequests: (req: Request, message: string, details?: unknown) => {
+    const error = createError(AuthErrorCode.TOO_MANY_REQUESTS, message, 429, details);
+    return formatErrorResponse(req, error);
+  },
+  
+  accountLocked: (req: Request, lockedUntil: string) => {
+    const error = createError(
+      AuthErrorCode.ACCOUNT_LOCKED,
+      'Account temporarily locked due to too many failed attempts',
+      401,
+      { lockedUntil }
+    );
+    return formatErrorResponse(req, error);
+  },
+  
+  invalidLoginMethod: (req: Request) => {
+    const error = createError(
+      AuthErrorCode.INVALID_LOGIN_METHOD,
+      'This account uses a different login method',
+      400
+    );
+    return formatErrorResponse(req, error);
+  },
+  
+  invalidToken: (req: Request, tokenType: string = 'token') => {
+    const error = createError(
+      AuthErrorCode.INVALID_TOKEN,
+      `Invalid or expired ${tokenType}`,
+      401
+    );
+    return formatErrorResponse(req, error);
+  }
 }; 

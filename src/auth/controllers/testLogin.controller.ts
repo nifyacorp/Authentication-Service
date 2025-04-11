@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { generateAccessToken, generateRefreshToken } from '../../utils/jwt.js';
-import { LoginBody } from './types.js';
+import { LoginBody } from '../models/types.js';
 
 export const testLogin = async (req: Request<{}, {}, LoginBody>, res: Response, next: NextFunction) => {
   try {
@@ -33,4 +33,4 @@ export const testLogin = async (req: Request<{}, {}, LoginBody>, res: Response, 
     console.error('Test login error:', error);
     next(error);
   }
-};
+}; 
