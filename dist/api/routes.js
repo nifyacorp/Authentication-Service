@@ -3,7 +3,6 @@ import * as userController from '../auth/controllers/user.controller.js';
 import { logout, refreshToken, revokeAllSessions, getSession } from '../auth/controllers/session.controller.js';
 import { forgotPassword, resetPassword, changePassword } from '../auth/controllers/password.controller.js';
 import { getGoogleAuthUrl, handleGoogleCallback } from '../auth/controllers/oauth.controller.js';
-import { testLogin } from '../auth/controllers/testLogin.controller.js';
 import { authenticate, rateLimit } from '../middleware/auth.middleware.js';
 import { validateSignup, validateLogin, validateLogout, validateChangePassword, validateForgotPassword, validateResetPassword, validateRefreshToken, validateVerifyEmail } from '../auth/validation/middleware.js';
 const router = Router();
@@ -12,7 +11,7 @@ const AUTH_RATE_LIMIT = rateLimit(10, 15); // 10 requests per 15 minutes for sen
 const GENERAL_RATE_LIMIT = rateLimit(100, 5); // 100 requests per 5 minutes for general endpoints
 // User management
 router.post('/auth/signup', AUTH_RATE_LIMIT, validateSignup, userController.signup);
-router.post('/auth/login', AUTH_RATE_LIMIT, testLogin, validateLogin, userController.login);
+router.post('/auth/login', AUTH_RATE_LIMIT, validateLogin, userController.login);
 router.get('/auth/me', authenticate, GENERAL_RATE_LIMIT, userController.getCurrentUser);
 router.post('/auth/verify-email', GENERAL_RATE_LIMIT, validateVerifyEmail, userController.verifyEmail);
 // Session management

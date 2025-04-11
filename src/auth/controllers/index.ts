@@ -8,7 +8,4 @@ export { logout, refreshToken, revokeAllSessions, getSession } from './session.c
 export { forgotPassword, resetPassword, changePassword } from './password.controller.js';
 
 // OAuth
-export * from './oauth.controller.js';
-
-// Test login
-export * from './testLogin.controller.js'; 
+export * from './oauth.controller.js'; 
