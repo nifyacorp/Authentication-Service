@@ -83,3 +83,14 @@ CREATE TRIGGER after_user_insert
 AFTER INSERT ON users
 FOR EACH ROW
 EXECUTE FUNCTION trigger_user_sync();
+
+-- Grant permissions on all tables
+GRANT ALL PRIVILEGES ON TABLE users TO auth_service;
+GRANT ALL PRIVILEGES ON TABLE refresh_tokens TO auth_service;
+GRANT ALL PRIVILEGES ON TABLE password_reset_requests TO auth_service;
+
+-- Grant usage on sequences (for auto-incrementing IDs)
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO auth_service;
+
+-- Grant execute permission on functions
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO auth_service;

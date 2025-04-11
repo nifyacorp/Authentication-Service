@@ -73,6 +73,7 @@ export const login = async (req: Request<{}, {}, LoginBody>, res: Response, next
       console.log(`🔍 DEBUG [LOGIN]: No user found with email: ${email}`);
       console.log('Login attempt with non-existent email:', email);
       const errorResponse = formatErrorResponse(req, 'User not found. Please check your email or register a new account.');
+      errorResponse.code = 'USER_NOT_FOUND';
       return res.status(404).json({ error: errorResponse });
     }
     
