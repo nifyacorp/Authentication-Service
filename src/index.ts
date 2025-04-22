@@ -8,7 +8,7 @@ import { formatErrorResponse } from './auth/errors/factory.js';
 // Load environment variables
 const PORT = process.env.PORT || 8080;
 const FRONTEND_URL = process.env.FRONTEND_URL || '';
-const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || 'localhost,127.0.0.1')
+const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || 'localhost,127.0.0.1,nifya.com')
   .split(',')
   .map(origin => origin.trim());
 
@@ -40,7 +40,8 @@ app.use(cors({
     
     // Check if origin is allowed
     if (CORS_ALLOWED_ORIGINS.includes(origin) || 
-        CORS_ALLOWED_ORIGINS.some(allowed => origin.endsWith(allowed) || origin.includes(allowed))) {
+        CORS_ALLOWED_ORIGINS.some(allowed => origin.endsWith(allowed) || origin.includes(allowed)) ||
+        origin.includes('nifya.com')) {
       return callback(null, true);
     }
     
